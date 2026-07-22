@@ -3,7 +3,6 @@ navegar anchors/keyframes/tomas, disparar generaciones por etapa, editor de keyf
 video por plano, grafo keyframe→video con STALE, y el GO final (assemble). Guarda la FAL_KEY en el backend
 (el navegador nunca la ve). Regen de imagen/video ASÍNCRONA (job + polling). Sin LOOP_ALLOW_PAID=1 → dry.
 """
-from __future__ import annotations
 import json, threading, uuid
 from . import deps, editing, anchors, keyframes, shots, assemble, falx
 

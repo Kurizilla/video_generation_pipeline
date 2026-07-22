@@ -5,7 +5,15 @@ const asJson = (r) => r.json()
 const get = (p) => fetch(API + p).then(asJson)
 const post = (p, body) =>
   fetch(API + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(asJson)
-const postForm = (p, form) => fetch(API + p, { method: 'POST', body: form }).then(asJson) // multipart (uploads)
+// multipart (uploads): nunca revienta — si el server devuelve error/no-JSON, resuelve a {error}
+const postForm = async (p, form) => {
+  let r
+  try { r = await fetch(API + p, { method: 'POST', body: form }) }
+  catch (e) { return { error: 'red: ' + (e?.message || e) } }
+  const text = await r.text()
+  try { return JSON.parse(text) }
+  catch { return { error: `HTTP ${r.status}: ${(text || r.statusText).slice(0, 200)}` } }
+}
 
 // URL de un asset generado servido por el backend (/out/<ruta relativa a project.out>)
 export const outUrl = (path) => `${API}/out/${path}?t=${Date.now()}`
