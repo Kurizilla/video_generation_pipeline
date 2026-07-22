@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, outUrl, pollJob } from '../api'
 import { useStore } from '../store.jsx'
 import Variants from './Variants.jsx'
@@ -22,28 +22,35 @@ export default function ShotPanel({ tkey }) {
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
 
+  const tkeyRef = useRef(tkey); tkeyRef.current = tkey   // para que los polls en curso sepan si seguís en esta toma
+
   const load = async () => {
     const m = await api.vidMeta(tkey); setMeta(m)
-    setPrompt(m.prompt || ''); setComment(''); setStatus('')
+    setPrompt(m.prompt || ''); setComment(''); setStatus(''); setBusy(false)   // reset al cambiar de toma
     setEngine((m.model || '').includes('kling') ? 'kling' : 'seedance')
     setDur(+(m.params?.duration || 5)); setRes(m.params?.resolution || '1080p')
     setVariants((await api.vidVariants(tkey)).variants)
   }
   useEffect(() => { load() }, [tkey])
 
+  // Dispara y LIBERA: apenas queda encolado el job, se re-habilita el botón para poder mandar más tomas
+  // en paralelo. El seguimiento vive en la cola global (esquina ↙); este panel solo refresca sus variantes.
   const regen = async () => {
+    const myKey = tkey
     const overrides = { prompt, duration: String(dur), model: MODELS[engine] }
     if (engine === 'kling') overrides.cfg_scale = cfg; else overrides.resolution = res
     setBusy(true); setStatus('Encolando…')
-    const r = await api.vidRegen({ key: tkey, comment, overrides, num_variants: nvar })
-    if (r.error) { setBusy(false); setStatus('Error: ' + r.error); return }
-    if (r.dry) { setBusy(false); setStatus(`DRY (no gasta): ${r.model} ~$${r.est_cost_usd}`); return }
-    await pollJob('vid', r.job_id, async (s) => {
+    const r = await api.vidRegen({ key: myKey, comment, overrides, num_variants: nvar })
+    setBusy(false)   // encolado (o error): el botón vuelve a estar disponible enseguida
+    if (r.error) { setStatus('Error: ' + r.error); return }
+    if (r.dry) { setStatus(`DRY (no gasta): ${r.model} ~$${r.est_cost_usd}`); return }
+    if (myKey === tkeyRef.current) setStatus(`En cola: ${r.total} variante(s) · seguí el progreso en la cola ↙`)
+    pollJob('vid', r.job_id, async (s) => {
+      if (myKey !== tkeyRef.current) return   // cambiaste de toma: no piso tu vista actual
       const errs = s.errors || []
       setStatus(`Generando ${s.variants?.length || 0}/${s.total}${errs.length ? ' · ⚠ ' + errs.join(' | ') : ''}${s.done ? ' · listo' : ''}`)
-      setVariants((await api.vidVariants(tkey)).variants)
+      setVariants((await api.vidVariants(myKey)).variants)
     })
-    setBusy(false)
   }
 
   const accept = async (variant_path) => { const r = await api.vidAccept({ key: tkey, variant_path, note: comment }); if (r.ok) { flash('Video aprobado v' + r.current); await refresh(); await load() } }

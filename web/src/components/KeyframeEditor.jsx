@@ -21,18 +21,23 @@ export default function KeyframeEditor({ stem }) {
   const [busy, setBusy] = useState(false)
   const maskRef = useRef(null)
 
+  const stemRef = useRef(stem); stemRef.current = stem   // para que los polls en curso sepan si seguís en este keyframe
+
   const load = async () => {
     const m = await api.kfMeta(stem); setMeta(m); setDeps(await api.depsFor(stem))
     setPrompt(m.prompt || '')
-    setVariants((await api.kfVariants(stem)).variants); setRefs([]); setComment(''); setInstruction(''); setStatus('')
+    setVariants((await api.kfVariants(stem)).variants); setRefs([]); setComment(''); setInstruction(''); setStatus(''); setBusy(false)
   }
   useEffect(() => { load() }, [stem])
 
   const addFiles = async (files) => { const urls = await Promise.all([...files].map(fileToDataUrl)); setRefs((r) => [...r, ...urls]) }
   const doPaste = async () => { const d = await pasteImage(); if (d) setRefs((r) => [...r, d]); else flash('Sin imagen en el portapapeles') }
 
+  // Dispara y LIBERA: apenas queda encolado, se re-habilita el botón para poder mandar más keyframes/tomas
+  // en paralelo. El seguimiento vive en la cola global (esquina ↙); este panel solo refresca sus variantes.
   const regen = async () => {
-    const body = { stem, mode, num_variants: nvar, ref_images: refs }
+    const myStem = stem
+    const body = { stem: myStem, mode, num_variants: nvar, ref_images: refs }
     if (mode === 'A') { body.prompt = prompt; body.comment = comment; body.hifi = hifi }
     else {
       if (maskRef.current?.isEmpty()) { flash('Dibujá una máscara primero'); return }
@@ -40,14 +45,16 @@ export default function KeyframeEditor({ stem }) {
     }
     setBusy(true); setStatus('Encolando…')
     const r = await api.kfRegen(body)
-    if (r.error) { setBusy(false); setStatus('Error: ' + r.error); return }
-    if (r.dry) { setBusy(false); setStatus(`DRY (no gasta): ${r.model} ~$${r.est_cost_usd}`); return }
-    await pollJob('kf', r.job_id, async (s) => {
+    setBusy(false)   // encolado (o error): el botón vuelve a estar disponible enseguida
+    if (r.error) { setStatus('Error: ' + r.error); return }
+    if (r.dry) { setStatus(`DRY (no gasta): ${r.model} ~$${r.est_cost_usd}`); return }
+    if (myStem === stemRef.current) setStatus(`En cola: ${r.total} variante(s) · seguí el progreso en la cola ↙`)
+    pollJob('kf', r.job_id, async (s) => {
+      if (myStem !== stemRef.current) return   // cambiaste de keyframe: no piso tu vista actual
       const errs = s.errors || []
       setStatus(`Generando ${s.variants?.length || 0}/${s.total}${errs.length ? ' · ⚠ ' + errs.join(' | ') : ''}${s.done ? ' · listo' : ''}`)
-      setVariants((await api.kfVariants(stem)).variants)
+      setVariants((await api.kfVariants(myStem)).variants)
     })
-    setBusy(false)
   }
 
   const accept = async (variant_path) => {
