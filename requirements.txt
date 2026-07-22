@@ -1,0 +1,8 @@
+# Pipeline (Python 3.10+). Instalar: python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
+fal-client>=0.5          # imagen + video (fal.ai)
+python-dotenv>=1.0       # carga .env
+Pillow>=10               # máscaras + subtítulos (compositing)
+fastapi>=0.110           # API del pipeline (front React)
+uvicorn[standard]>=0.29  # servidor ASGI para la API
+python-multipart>=0.0.9  # uploads (reemplazo manual de keyframes/videos/anclas)
+# Requiere además ffmpeg/ffprobe en el sistema (brew install ffmpeg / apt-get install ffmpeg).

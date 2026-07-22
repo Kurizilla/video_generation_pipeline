@@ -1,0 +1,64 @@
+# ===== Secretos / credenciales (NUNCA subir) =====
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*credentials*.json
+service-account*.json
+application_default_credentials.json
+
+# ===== Python =====
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ===== Node / React (web/) =====
+node_modules/
+web/dist/
+web/build/
+web/.vite/
+*.local
+
+# ===== Media generada (video/audio) — nunca al repo =====
+*.mp4
+*.mov
+*.webm
+*.mp3
+*.wav
+
+# ===== Dirs de salida / trabajo generados por el pipeline =====
+out/
+out_*/
+projects/*/out/
+**/keyframes/
+**/shots_raw/
+**/vo/
+**/_tmp/
+**/_uploads/
+**/_versions/
+**/_variants/
+**/_snapshots/
+**/_backup*/
+
+# ===== Insumos por proyecto (pesados / IP) — excepto el ejemplo liviano =====
+projects/*/captures/
+!projects/example/captures/
+!projects/example/captures/**
+
+# El proyecto real "El Salvador Aprende" (IP + assets pesados) vive FUERA del repo (ver RELEASE_PLAN.md)
+projects/el_salvador/
+
+# ===== Sistema / editores / logs =====
+.DS_Store
+.idea/
+.vscode/
+.claude/
+*.log
+_server.log
+*.swp

@@ -1,0 +1,27 @@
+{
+  "name": "example",
+  "aspect_ratio": "16:9",
+  "style": "Pixar/Disney feature-animation 3D render, subsurface scattering, warm golden-hour volumetric lighting, shallow depth of field, cohesive single world. Do NOT embed legible text (added later as overlays).",
+  "voice_id": "cgSgspJ2msm6clMCkdW9",
+  "content_blocked_tomas": [],
+
+  "anchors": {
+    "style_plate": { "prompt": "A single cohesive STYLE / MOOD PLATE establishing palette, materials and lighting for the film.", "refs": [] },
+    "hero_sheet":  { "prompt": "Character MODEL SHEET for the HERO: turnaround + expression row, on-model with the reference.", "refs": ["captures/hero_ref.png"] },
+    "guide_sheet": { "prompt": "Character MODEL SHEET for the GUIDE/mascot: hero pose + expressions, on-model with the reference.", "refs": ["captures/guide_ref.png"] },
+    "room_sheet":  { "prompt": "ENVIRONMENT reference sheet for the recurring ROOM: wide establishing angle + detail insets, consistent across interior shots.", "refs": ["captures/room_ref.png"] }
+  },
+
+  "keyframes": {
+    "shot01_start": { "prompt": "Opening wide establishing shot of the world, before the story begins.", "refs": ["style_plate"] },
+    "seam_01-02":   { "prompt": "The hero appears in the recurring room, front-center, starting the first action.", "refs": ["room_sheet", "hero_sheet"] },
+    "seam_02-03":   { "prompt": "The guide joins the hero in the room; both mid-action.", "refs": ["room_sheet", "hero_sheet", "guide_sheet"] },
+    "shot03_end":   { "prompt": "Final beat: hero and guide face the camera together, warm closing image.", "refs": ["hero_sheet", "guide_sheet"] }
+  },
+
+  "tomas": [
+    { "n": 1, "title": "Apertura",        "start": "shot01_start", "end": "seam_01-02", "duration": 5, "static": false, "motion": "Smooth push-in from the wide establishing world into the room, settling on the hero.", "vo": "A new story begins." },
+    { "n": 2, "title": "El encuentro",    "start": "seam_01-02",   "end": "seam_02-03", "duration": 5, "static": false, "motion": "A gentle arc as the guide appears beside the hero; both react.", "vo": "The hero meets a friendly guide." },
+    { "n": 3, "title": "Cierre",          "start": "seam_02-03",   "end": "shot03_end", "duration": 6, "static": false, "motion": "The camera settles as hero and guide turn to face the camera, smiling.", "vo": "Together, they set out to learn." }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "video-pipeline-web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Front del pipeline de video: navegar y operar todas las etapas (personajes/sets/keyframes/shots), editor de keyframes A/B, regen de video por plano, STALE y GO final.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11"
+  }
+}
