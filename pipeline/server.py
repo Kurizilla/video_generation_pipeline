@@ -24,11 +24,18 @@ def _view_tomas(project):
 
 
 def _worker(jid, fn, plan, n):
-    for i in range(n):
+    # Las N variantes se generan EN PARALELO (cada llamada a fal es independiente y libera el GIL en la
+    # espera de red). Antes iban en serie, por eso pedir 2-3 variantes tardaba 2-3x. Los distintos jobs
+    # (keyframes/tomas) ya corrían en paralelo, un thread por job.
+    from concurrent.futures import ThreadPoolExecutor
+    def _one(i):
         try:
-            with _LOCK: _JOBS[jid]["variants"].append(fn(plan, i))
+            r = fn(plan, i)                                   # descarga + registra en _tmp al completar
+            with _LOCK: _JOBS[jid]["variants"].append(r)
         except Exception as ex:
             with _LOCK: _JOBS[jid]["errors"].append(f"{type(ex).__name__}: {str(ex)[:180]}")
+    with ThreadPoolExecutor(max_workers=max(1, n)) as ex:
+        list(ex.map(_one, range(n)))
     with _LOCK: _JOBS[jid]["done"] = True
     return _JOBS[jid]["errors"]
 
