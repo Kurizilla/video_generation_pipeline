@@ -10,6 +10,7 @@ export default function KeyframeEditor({ stem }) {
   const [meta, setMeta] = useState(null)
   const [deps, setDeps] = useState(null)
   const [mode, setMode] = useState('A')
+  const [prompt, setPrompt] = useState('')
   const [comment, setComment] = useState('')
   const [instruction, setInstruction] = useState('')
   const [hifi, setHifi] = useState(true)
@@ -21,7 +22,8 @@ export default function KeyframeEditor({ stem }) {
   const maskRef = useRef(null)
 
   const load = async () => {
-    setMeta(await api.kfMeta(stem)); setDeps(await api.depsFor(stem))
+    const m = await api.kfMeta(stem); setMeta(m); setDeps(await api.depsFor(stem))
+    setPrompt(m.prompt || '')
     setVariants((await api.kfVariants(stem)).variants); setRefs([]); setComment(''); setInstruction(''); setStatus('')
   }
   useEffect(() => { load() }, [stem])
@@ -31,7 +33,7 @@ export default function KeyframeEditor({ stem }) {
 
   const regen = async () => {
     const body = { stem, mode, num_variants: nvar, ref_images: refs }
-    if (mode === 'A') { body.comment = comment; body.hifi = hifi }
+    if (mode === 'A') { body.prompt = prompt; body.comment = comment; body.hifi = hifi }
     else {
       if (maskRef.current?.isEmpty()) { flash('Dibujá una máscara primero'); return }
       body.instruction = instruction; body.mask_png = maskRef.current.getMaskPng(); body.strength = 0.6
@@ -86,8 +88,15 @@ export default function KeyframeEditor({ stem }) {
       {mode === 'A' ? (
         <>
           <img src={img} className="kfimg" alt={stem} />
-          <div className="lbl">Comentario (se suma al prompt original)</div>
-          <textarea rows={3} value={comment} onChange={(e) => setComment(e.target.value)}
+          <div className="row">
+            <div className="lbl" style={{ flex: 1 }}>Prompt original (editable)</div>
+            <button style={{ padding: '2px 8px' }} disabled={prompt === (meta.prompt || '')}
+                    onClick={() => setPrompt(meta.prompt || '')}>↺ restaurar original</button>
+          </div>
+          <textarea rows={6} value={prompt} onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="prompt base del keyframe" />
+          <div className="lbl">Comentario / ajuste extra (opcional, se suma al prompt)</div>
+          <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)}
                     placeholder="el niño de atrás debe ser un niño, como en la referencia" />
           <label className="row" style={{ marginTop: 4 }}><input type="checkbox" checked={hifi} onChange={(e) => setHifi(e.target.checked)} /> alta fidelidad (+$)</label>
         </>

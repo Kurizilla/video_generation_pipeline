@@ -45,13 +45,14 @@ def _blend(base_path, edited_path, mask_path, dest):
 
 # ================= KEYFRAMES =================
 def kf_prep(project, stem, mode="A", comment="", instruction="", ref_images=None, hifi=False,
-            strength=0.6, mask_png=None, num_variants=2):
+            strength=0.6, mask_png=None, num_variants=2, prompt=None):
     meta = _load(project.kf_meta)
     if stem not in meta:
         return {"error": f"keyframe desconocido: {stem}"}
     e = meta[stem]; model = project.models["image_hifi"] if hifi or mode == "A" else project.models["image_hifi"]
     if mode == "A":
-        prompt = e["prompt"] + ("\n\nADJUSTMENT (keep everything else the same): " + comment if comment else "")
+        base = prompt if (prompt is not None and prompt.strip()) else e["prompt"]  # prompt original editable desde el front
+        prompt = base + ("\n\nADJUSTMENT (keep everything else the same): " + comment if comment else "")
         anchors = [project.resolve_ref(r) for r in e.get("refs", [])]
         anchors = [a for a in anchors if a.is_file()]
         refs = (_resolve_refs(project, ref_images) + anchors)[:14]

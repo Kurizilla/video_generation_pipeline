@@ -79,7 +79,7 @@ def build_app(project):
         n = int(body.get("num_variants", 2))
         plan = editing.kf_prep(project, body["stem"], body.get("mode", "A"), body.get("comment", ""),
                                body.get("instruction", ""), body.get("ref_images", []), body.get("hifi", False),
-                               body.get("strength", 0.6), body.get("mask_png"), n)
+                               body.get("strength", 0.6), body.get("mask_png"), n, prompt=body.get("prompt"))
         if "error" in plan: return plan
         if not falx.paid_enabled(): return {"dry": True, "model": plan["model"], "est_cost_usd": plan["est_cost_usd"]}
         jid = uuid.uuid4().hex[:12]; _JOBS[jid] = {"variants": [], "errors": [], "done": False, "total": n, "kind": "kf", "stem": body["stem"]}
