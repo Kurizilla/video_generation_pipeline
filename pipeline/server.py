@@ -6,7 +6,16 @@ video por plano, grafo keyframe→video con STALE, y el GO final (assemble). Gua
 import json, threading, uuid
 from . import deps, editing, anchors, keyframes, shots, assemble, falx
 
-_JOBS = {}; _LOCK = threading.Lock()
+_JOBS = {}; _LOCK = threading.Lock(); _SEQ = [0]
+
+
+def _mk_job(kind, label, total):
+    with _LOCK:
+        _SEQ[0] += 1
+        jid = uuid.uuid4().hex[:12]
+        _JOBS[jid] = {"variants": [], "errors": [], "done": False, "total": total,
+                      "kind": kind, "label": label, "seq": _SEQ[0]}
+    return jid
 
 
 def _view_tomas(project):
@@ -89,7 +98,7 @@ def build_app(project):
                                body.get("strength", 0.6), body.get("mask_png"), n, prompt=body.get("prompt"))
         if "error" in plan: return plan
         if not falx.paid_enabled(): return {"dry": True, "model": plan["model"], "est_cost_usd": plan["est_cost_usd"]}
-        jid = uuid.uuid4().hex[:12]; _JOBS[jid] = {"variants": [], "errors": [], "done": False, "total": n, "kind": "kf", "stem": body["stem"]}
+        jid = _mk_job("kf", body["stem"], n)
         threading.Thread(target=lambda: (_worker(jid, lambda pl, i: editing.kf_regen_one(project, pl, i), plan, n),
                                          editing.kf_set_error(project, body["stem"], _JOBS[jid]["errors"])), daemon=True).start()
         return {"job_id": jid, "total": n, "model": plan["model"], "est_cost_usd": plan["est_cost_usd"]}
@@ -116,7 +125,7 @@ def build_app(project):
         plan = editing.vid_prep(project, body["key"], body.get("comment", ""), body.get("overrides", {}), n)
         if "error" in plan: return plan
         if not falx.paid_enabled(): return {"dry": True, "model": plan["model"], "est_cost_usd": plan["est_cost_usd"]}
-        jid = uuid.uuid4().hex[:12]; _JOBS[jid] = {"variants": [], "errors": [], "done": False, "total": n, "kind": "vid", "key": body["key"]}
+        jid = _mk_job("vid", body["key"], n)
         threading.Thread(target=lambda: (_worker(jid, lambda pl, i: editing.vid_regen_one(project, pl, i), plan, n),
                                          editing.vid_set_error(project, body["key"], _JOBS[jid]["errors"])), daemon=True).start()
         return {"job_id": jid, "total": n, "model": plan["model"], "est_cost_usd": plan["est_cost_usd"]}
@@ -125,6 +134,23 @@ def build_app(project):
     def vid_status_job(jid): return _JOBS.get(jid, {"error": "job desconocido"})
     @app.get("/api/vid/variants/{key}")
     def vid_vars(key): return {"variants": editing.vid_variants(project, key)}
+
+    # -------- cola global de jobs (para el tracker del front) --------
+    @app.get("/api/jobs")
+    def jobs():
+        with _LOCK:
+            items = [{"jid": j, "kind": v["kind"], "label": v.get("label", ""), "total": v["total"],
+                      "done_count": len(v["variants"]), "done": v["done"], "errors": v["errors"],
+                      "seq": v.get("seq", 0)} for j, v in _JOBS.items()]
+        items.sort(key=lambda x: x["seq"], reverse=True)   # más reciente primero
+        return {"jobs": items}
+
+    @app.post("/api/jobs/clear")
+    def jobs_clear():
+        with _LOCK:
+            gone = [j for j, v in _JOBS.items() if v["done"]]
+            for j in gone: _JOBS.pop(j, None)
+        return {"ok": True, "cleared": len(gone)}
     @app.post("/api/vid/accept")
     def vid_acc(body: dict = Body(...)): return editing.vid_accept(project, body["key"], body["variant_path"], body.get("note", ""))
     @app.post("/api/vid/revert")

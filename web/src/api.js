@@ -48,6 +48,10 @@ export const api = {
   vidRevert: (body) => post('/api/vid/revert', body),
   vidSetStatus: (body) => post('/api/vid/set-status', body),
 
+  // --- cola global de jobs (tracker) ---
+  jobs: () => get('/api/jobs'),
+  jobsClear: () => post('/api/jobs/clear'),
+
   // --- reemplazo MANUAL por archivo local (upload) ---
   kfUpload: (stem, file) => { const f = new FormData(); f.append('stem', stem); f.append('file', file); return postForm('/api/kf/upload', f) },
   vidUpload: (key, file) => { const f = new FormData(); f.append('key', key); f.append('file', file); return postForm('/api/vid/upload', f) },

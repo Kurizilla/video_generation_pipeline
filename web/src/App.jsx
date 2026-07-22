@@ -4,6 +4,7 @@ import AnchorsStage from './components/AnchorsStage.jsx'
 import KeyframesStage from './components/KeyframesStage.jsx'
 import ShotsStage from './components/ShotsStage.jsx'
 import MasterStage from './components/MasterStage.jsx'
+import JobTracker from './components/JobTracker.jsx'
 
 const STAGES = [
   { id: 'anchors', label: 'Personajes / Sets' },
@@ -55,6 +56,7 @@ export default function App() {
       </div>
 
       {toast && <div className="toast">{toast}</div>}
+      <JobTracker />
     </div>
   )
 }
