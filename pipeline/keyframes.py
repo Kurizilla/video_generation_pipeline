@@ -20,7 +20,7 @@ def build_meta(project):
                  "model": model, "versions": [], "current": 0, "last_error": None}
         if stem in old:
             entry["versions"] = old[stem].get("versions", []); entry["current"] = old[stem].get("current", 0)
-        if not entry["versions"]:
+        if not entry["versions"] and project.keyframe_path(stem).is_file():   # solo v0 si la imagen existe
             entry["versions"] = [{"v": 0, "path": relfile, "source": "gen", "note": "original", "ts": None}]
         meta[stem] = entry
     project.kf_meta.write_text(json.dumps(meta, ensure_ascii=False, indent=2))

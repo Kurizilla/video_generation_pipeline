@@ -107,17 +107,27 @@ def kf_variants(project, stem):
 
 
 def kf_accept(project, stem, variant_path, note=""):
-    m = _load(project.kf_meta); e = m[stem]
-    v0 = next((x for x in e["versions"] if x["v"] == 0), None)
+    m = _load(project.kf_meta); e = m.get(stem)
+    if e is None:                       # keyframe NUEVO (p.ej. de una toma insertada): crear entrada mínima
+        if stem not in project.keyframes:
+            return {"error": f"keyframe '{stem}' no existe en el proyecto"}
+        spec = project.keyframes.get(stem, {})
+        e = {"stem": stem, "file": str(project.keyframe_path(stem).relative_to(project.out)),
+             "prompt": spec.get("prompt", ""), "refs": spec.get("refs", []),
+             "model": project.models["image_hifi"], "versions": [], "current": 0, "last_error": None}
+        m[stem] = e
     vers = project.out / "keyframes" / "_versions"; vers.mkdir(parents=True, exist_ok=True)
     active = project.out / e["file"]
-    if v0 and (project.out / v0["path"]).resolve() == active.resolve():
+    v0 = next((x for x in e["versions"] if x["v"] == 0), None)
+    if v0 and (project.out / v0["path"]).resolve() == active.resolve() and active.is_file():
         safe0 = vers / f"{stem}.v0.png"
         if not safe0.exists():
             shutil.copy2(active, safe0)
         v0["path"] = str(safe0.relative_to(project.out))
-    n = max((x["v"] for x in e["versions"]), default=0) + 1
-    vp = vers / f"{stem}.v{n}.png"; shutil.copy2(project.out / variant_path, vp); shutil.copy2(vp, active)
+    n = max((x["v"] for x in e["versions"]), default=-1) + 1   # default -1 → primer accept de un kf nuevo = v0
+    vp = vers / f"{stem}.v{n}.png"
+    active.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(project.out / variant_path, vp); shutil.copy2(vp, active)
     e["versions"].append({"v": n, "path": str(vp.relative_to(project.out)), "source": "edit", "note": note, "ts": None})
     e["current"] = n; e["last_error"] = None; _save(project.kf_meta, m)
     return {"ok": True, "current": n}

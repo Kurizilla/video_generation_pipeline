@@ -60,6 +60,8 @@ def _remap_and_finish(project, new_tomas, snap):
     if project.shots_meta.is_file(): project.shots_meta.unlink()   # rebuild limpio (evita misattribution)
     _save(project)
     shots_stage.build_meta(project)
+    from . import keyframes as kf_stage
+    kf_stage.build_meta(project)        # asegura entradas de manifiesto para keyframes nuevos/cambiados
     return {"ok": True, "snapshot": snap, "tomas": len(new_tomas)}
 
 
