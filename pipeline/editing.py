@@ -70,7 +70,10 @@ def kf_prep(project, stem, mode="A", comment="", instruction="", ref_images=None
 def kf_regen_one(project, plan, idx):
     tmp = project.out / "keyframes" / "_tmp"; tmp.mkdir(parents=True, exist_ok=True)
     if plan["mode"] == "A":
-        url = falx.image_edit(plan["model"], plan["prompt"], plan["refs"], project.aspect, config.TIMEOUT_IMAGE)
+        if plan["refs"]:
+            url = falx.image_edit(plan["model"], plan["prompt"], plan["refs"], project.aspect, config.TIMEOUT_IMAGE)
+        else:   # sin refs: el modelo /edit exige image_urls → caé a texto→imagen (como la etapa keyframes.run)
+            url = falx.image_gen(plan["model"].replace("/edit", ""), plan["prompt"], project.aspect, config.TIMEOUT_IMAGE)
         dest = tmp / f"{plan['stem']}.A.{int(time.time()*1000)}.{idx}.png"; falx.download(url, dest)
     else:
         url = falx.inpaint(plan["model"], plan["prompt"], plan["base"], plan["mask"], plan["ref0"],
