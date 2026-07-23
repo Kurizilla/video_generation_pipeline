@@ -15,8 +15,12 @@ const postForm = async (p, form) => {
   catch { return { error: `HTTP ${r.status}: ${(text || r.statusText).slice(0, 200)}` } }
 }
 
-// URL de un asset generado servido por el backend (/out/<ruta relativa a project.out>)
-export const outUrl = (path) => `${API}/out/${path}?t=${Date.now()}`
+// URL de un asset generado (/out/<ruta relativa a project.out>).
+// Cache-buster ESTABLE por sesión: la URL NO cambia entre re-renders, para que el <video> no se recargue
+// (y se trabe) en cada poll. Se refresca solo cuando un asset muta, vía bustCache() (llamado en refresh()).
+let _bust = Date.now()
+export const bustCache = () => { _bust = Date.now() }
+export const outUrl = (path) => `${API}/out/${path}?t=${_bust}`
 
 export const api = {
   // --- multi-proyecto ---

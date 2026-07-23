@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
-import { api } from './api'
+import { api, bustCache } from './api'
 
 const Ctx = createContext(null)
 
@@ -14,6 +14,7 @@ export function StoreProvider({ children }) {
   const doneSeen = useRef(new Set())   // jids ya completados → detectar transición a "listo"
 
   const refresh = useCallback(async () => {
+    bustCache()   // un asset pudo cambiar (mutación o job completado) → refrescá la URL; el poll NO llama refresh
     try {
       const [t, tr, r] = await Promise.all([api.tomas(), api.toRegen(), api.assemblyReady()])
       setTomas(t); setToRegen(tr); setReady(r)
