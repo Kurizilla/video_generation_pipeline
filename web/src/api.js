@@ -19,6 +19,13 @@ const postForm = async (p, form) => {
 export const outUrl = (path) => `${API}/out/${path}?t=${Date.now()}`
 
 export const api = {
+  // --- multi-proyecto ---
+  projects: () => get('/api/projects'),
+  projectSelect: (name) => post('/api/projects/select', { name }),
+  projectCreate: (body) => post('/api/projects/create', body),
+  batchPlan: () => get('/api/batch/plan'),
+  batchRun: () => post('/api/batch/run', {}),
+
   // --- lectura / estado ---
   project: () => get('/api/project'),
   tomas: () => get('/api/tomas'),

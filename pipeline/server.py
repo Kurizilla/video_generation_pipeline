@@ -3,7 +3,7 @@ navegar anchors/keyframes/tomas, disparar generaciones por etapa, editor de keyf
 video por plano, grafo keyframe→video con STALE, y el GO final (assemble). Guarda la FAL_KEY en el backend
 (el navegador nunca la ve). Regen de imagen/video ASÍNCRONA (job + polling). Sin LOOP_ALLOW_PAID=1 → dry.
 """
-import json, threading, uuid
+import json, threading, uuid, pathlib
 from . import deps, editing, anchors, keyframes, shots, assemble, falx
 
 _JOBS = {}; _LOCK = threading.Lock(); _SEQ = [0]
@@ -49,7 +49,24 @@ def _worker(jid, fn, plan, n):
     return _JOBS[jid]["errors"]
 
 
+class ActiveProject:
+    """Proxy al proyecto ACTIVO. Todos los endpoints operan sobre este objeto; cambiar de proyecto solo
+    intercambia el Project subyacente (._p), así el front puede seleccionar sin reiniciar el server."""
+    def __init__(self, initial):
+        object.__setattr__(self, "_p", initial)
+        object.__setattr__(self, "root", initial.dir.parent)   # carpeta projects/
+    def _switch(self, name):
+        from . import project as prj
+        object.__setattr__(self, "_p", prj.load(self.root / name))
+    def __getattr__(self, k): return getattr(object.__getattribute__(self, "_p"), k)
+
+
+def _list_projects(root):
+    return sorted(d.name for d in pathlib.Path(root).iterdir() if (d / "project.json").is_file())
+
+
 def build_app(project):
+    import pathlib
     from fastapi import FastAPI, Body
     from fastapi.responses import FileResponse, Response
     from fastapi.middleware.cors import CORSMiddleware
@@ -70,6 +87,37 @@ def build_app(project):
     def project_info():
         return {"name": project.name, "aspect": project.aspect, "paid": falx.paid_enabled(),
                 "anchors": list(project.anchors), "tomas": len(project.tomas)}
+
+    # -------- multi-proyecto (selector del front) --------
+    @app.get("/api/projects")
+    def projects_list():
+        names = _list_projects(project.root)
+        return {"projects": [{"name": n, "active": n == project.name} for n in names], "active": project.name}
+
+    @app.post("/api/projects/select")
+    def projects_select(body: dict = Body(...)):
+        name = body.get("name", "")
+        if not (project.root / name / "project.json").is_file():
+            return {"error": f"proyecto '{name}' no existe"}
+        if isinstance(project, ActiveProject):
+            project._switch(name)
+            (project.root / ".active").write_text(name)   # persiste la selección entre reinicios
+        return {"ok": True, "active": project.name}
+
+    @app.post("/api/projects/create")
+    def projects_create(body: dict = Body(...)):
+        name = (body.get("name") or "").strip()
+        if not name or "/" in name or name.startswith("."):
+            return {"error": "nombre inválido"}
+        d = project.root / name
+        if (d / "project.json").is_file():
+            return {"error": f"'{name}' ya existe"}
+        (d / "captures").mkdir(parents=True, exist_ok=True)
+        cfg = {"name": name, "aspect_ratio": body.get("aspect", "16:9"), "style": body.get("style", ""),
+               "voice_id": body.get("voice_id", ""), "content_blocked_tomas": [],
+               "anchors": {}, "keyframes": {}, "tomas": []}
+        (d / "project.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=2))
+        return {"ok": True, "name": name}
 
     @app.get("/api/tomas")
     def tomas(): return _view_tomas(project)
@@ -251,11 +299,42 @@ def build_app(project):
     @app.post("/api/post/revert")
     def post_revert(body: dict = Body(...)): return postprod.revert(project, body["step"], body["v"])
 
+    # -------- modo ACELERADO: batch keyframes → shots (Parte C) --------
+    from . import batch
+
+    @app.get("/api/batch/plan")
+    def batch_plan(): return batch.plan(project)      # estimado, no gasta
+
+    @app.post("/api/batch/run")
+    def batch_run():
+        jid = _mk_job("batch", "keyframes+shots", 1)
+        def prog(d):
+            with _LOCK: _JOBS[jid]["progress"] = d
+        def work():
+            try:
+                r = batch.run(project, progress=prog)
+                with _LOCK:
+                    _JOBS[jid]["result"] = r
+                    if not r.get("dry"): _JOBS[jid]["variants"].append(r)
+            except Exception as ex:
+                with _LOCK: _JOBS[jid]["errors"].append(f"{type(ex).__name__}: {str(ex)[:180]}")
+            with _LOCK: _JOBS[jid]["done"] = True
+        threading.Thread(target=work, daemon=True).start()
+        return {"job_id": jid}
+
     return app
 
 
 def serve(project, port=8777, host="127.0.0.1"):
     import uvicorn
-    print(f"pipeline.server :: {'PAGA' if falx.paid_enabled() else 'DRY'} :: proyecto '{project.name}' :: "
+    from . import project as prj
+    root = project.dir.parent
+    active_file = root / ".active"                     # selección persistida entre reinicios
+    if active_file.is_file():
+        name = active_file.read_text().strip()
+        if name and (root / name / "project.json").is_file():
+            project = prj.load(root / name)
+    ap = ActiveProject(project)                        # proxy: el front puede cambiar de proyecto sin reiniciar
+    print(f"pipeline.server :: {'PAGA' if falx.paid_enabled() else 'DRY'} :: proyecto '{ap.name}' :: "
           f"http://{host}:{port}  (front en web/, apuntar VITE_API a esta URL)")
-    uvicorn.run(build_app(project), host=host, port=port, log_level="warning")
+    uvicorn.run(build_app(ap), host=host, port=port, log_level="warning")

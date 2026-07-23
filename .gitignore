@@ -51,8 +51,10 @@ projects/*/captures/
 !projects/example/captures/
 !projects/example/captures/**
 
-# El proyecto real "El Salvador Aprende" (IP + assets pesados) vive FUERA del repo (ver RELEASE_PLAN.md)
+# Proyectos reales (IP + assets pesados) viven FUERA del repo (ver RELEASE_PLAN.md); solo va projects/example
 projects/el_salvador/
+projects/aprenderaleer/
+projects/.active
 
 # ===== Sistema / editores / logs =====
 .DS_Store

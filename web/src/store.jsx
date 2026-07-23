@@ -10,6 +10,7 @@ export function StoreProvider({ children }) {
   const [ready, setReady] = useState({ ready: false, all_approved: false, stale: [], pending: [] })
   const [toast, setToast] = useState('')
   const [jobs, setJobs] = useState([])
+  const [projects, setProjects] = useState([])
   const doneSeen = useRef(new Set())   // jids ya completados → detectar transición a "listo"
 
   const refresh = useCallback(async () => {
@@ -19,7 +20,31 @@ export function StoreProvider({ children }) {
     } catch (e) { setToast('No se pudo contactar la API (' + API_HINT + ')') }
   }, [])
 
-  useEffect(() => { api.project().then(setProject).catch(() => setToast('API no responde')); refresh() }, [refresh])
+  const loadProjects = useCallback(async () => {
+    try { const r = await api.projects(); setProjects(r.projects || []) } catch { /* API caída */ }
+  }, [])
+
+  // Cambiar de proyecto: selecciona en el back (persiste) y recarga TODO el contexto sin mezclar.
+  const selectProject = useCallback(async (name) => {
+    const r = await api.projectSelect(name)
+    if (r.error) { setToast('Error: ' + r.error); return }
+    localStorage.setItem('vp_project', name)
+    const p = await api.project(); setProject(p)
+    await Promise.all([refresh(), loadProjects()])
+    setToast('Proyecto: ' + name)
+    setTimeout(() => setToast(''), 2500)
+  }, [refresh, loadProjects])
+
+  useEffect(() => {
+    (async () => {
+      await loadProjects()
+      const saved = localStorage.getItem('vp_project')
+      const cur = await api.project().catch(() => null)
+      if (saved && cur && saved !== cur.name) { await selectProject(saved); return }  // restaurar selección
+      if (cur) setProject(cur); else setToast('API no responde')
+      refresh()
+    })()
+  }, [refresh, loadProjects, selectProject])
 
   // Poller global de la cola de jobs (para el tracker de la esquina). Al completarse uno, refresca estado.
   useEffect(() => {
@@ -43,7 +68,7 @@ export function StoreProvider({ children }) {
   const flash = useCallback((msg) => { setToast(msg); setTimeout(() => setToast(''), 4000) }, [])
 
   return (
-    <Ctx.Provider value={{ project, tomas, toRegen, ready, refresh, toast, flash, jobs, clearJobs }}>
+    <Ctx.Provider value={{ project, tomas, toRegen, ready, refresh, toast, flash, jobs, clearJobs, projects, selectProject, loadProjects }}>
       {children}
     </Ctx.Provider>
   )

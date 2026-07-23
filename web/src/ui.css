@@ -82,3 +82,7 @@ a { color: var(--accent); }
 .jt-bar { height: 4px; background: #0e1219; border-radius: 3px; overflow: hidden; }
 .jt-fill { height: 100%; background: var(--accent); transition: width .4s ease; }
 .jt-err { color: #ffb4a2; font-size: 11px; }
+
+/* selector de proyecto en el header */
+.projsel { background: var(--panel2); color: var(--fg); border: 1px solid var(--line); border-radius: 8px;
+  padding: 5px 8px; font-size: 13px; max-width: 200px; }
