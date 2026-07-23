@@ -163,10 +163,28 @@ def vo_qa(project):
     return vo.get("qa") if vo else {"error": "no hay VO generada"}
 
 
-def vo_distribute(project, prose):
-    """IA: reparte/adapta un guion en PROSA entre las tomas (1 línea por toma), ajustando a la duración
-    de cada toma. La IA recibe título/acción/duración/línea-actual de cada toma. Solo texto, sin marcas.
-    Devuelve {n(str): texto} para poblar las casillas del front (el usuario revisa antes de sintetizar)."""
+def _toma_frame(project, t):
+    """Un fotograma representativo de la toma (frame medio del mp4; si no hay, el keyframe START).
+    Devuelve {'mime','b64'} o None. Sirve para que la IA VEA qué pasa en la toma."""
+    import base64, subprocess
+    sp = project.shot_path(t["n"])
+    if sp.is_file():
+        dur = assemble._dur(sp); mid = max(0.0, dur / 2)
+        out = project.out / "_tmp" / f"vodist_{t['n']}.jpg"; out.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["ffmpeg", "-y", "-ss", f"{mid:.2f}", "-i", str(sp), "-frames:v", "1",
+                        "-vf", "scale=640:-1", "-q:v", "5", str(out)], capture_output=True)
+        if out.is_file() and out.stat().st_size > 500:
+            return {"mime": "image/jpeg", "b64": base64.b64encode(out.read_bytes()).decode()}
+    kf = project.keyframe_path(t["start"])
+    if kf.is_file():
+        return {"mime": "image/png", "b64": base64.b64encode(kf.read_bytes()).decode()}
+    return None
+
+
+def vo_distribute(project, prose, vision=True):
+    """IA: reparte/adapta un guion en PROSA entre las tomas (1 línea por toma), ajustando a la duración.
+    Con vision=True le manda a Gemini un FOTOGRAMA de cada toma para que VEA qué pasa y asigne el guion a
+    lo que realmente se ve (dejando vacías las tomas que no encajan). Devuelve {n(str): texto}."""
     import re
     from . import llm
     if not (prose or "").strip():
@@ -184,19 +202,36 @@ def vo_distribute(project, prose):
             sp = project.shot_path(t["n"]); d = assemble._dur(sp) if sp.is_file() else float(t.get("duration") or 5)
         rows.append({"n": t["n"], "title": t.get("title", ""), "motion": t.get("motion", ""),
                      "dur": round(float(d), 2), "current": t.get("vo", "")})
-    system = ("Sos editor de voz en off para un corto animado. Distribuís el GUION EN PROSA que te da el "
-              "usuario entre las tomas, UNA línea por toma, adaptando/parafraseando ese texto para que quepa "
-              "hablado en la duración de cada toma (ritmo ~2.5 palabras/seg). El contenido de cada línea debe "
-              "salir EXCLUSIVAMENTE de la prosa dada — NO reuses ni copies ningún guion anterior; si la prosa "
-              "cambia, la salida debe cambiar. Usá el título y la acción de cada toma solo para decidir qué "
-              "parte de la prosa va en cuál y respetar el orden narrativo. Texto plano locutable, SIN marcas, "
-              "acotaciones ni tonos. Devolvé SOLO JSON: {\"lines\": {\"<n>\": \"<texto>\"}}, una entrada por toma.")
-    lst = "\n".join(f'{r["n"]}) {r["dur"]}s · máx≈{int(r["dur"]*2.5)} palabras · {r["title"]} · '
-                    f'acción: {r["motion"][:120]}' for r in rows)   # sin "actual": no anclar en el guion previo
-    user = (f"GUION EN PROSA A DISTRIBUIR (única fuente del texto):\n{prose.strip()}\n\n"
-            f"TOMAS (dónde repartirlo):\n{lst}\n\nDevolvé el JSON con una línea por toma, basada solo en la prosa.")
+    # Fotograma por toma (para que la IA VEA). all-or-nothing: si falta alguno, caé a texto-solo (sin desalinear).
+    imgs = []
+    if vision:
+        for t in sorted(project.tomas, key=lambda x: x["n"]):
+            fr = _toma_frame(project, t)
+            if fr: imgs.append(fr)
+        if len(imgs) != len(rows): imgs = []   # no arriesgar desalineación imagen↔toma
+
+    if imgs:
+        system = ("Sos editor de voz en off para un corto animado. Te doy un GUION EN PROSA y un FOTOGRAMA de "
+                  "cada toma, EN ORDEN (toma 1..N). MIRÁ cada fotograma para entender qué pasa en esa toma y "
+                  "asigná la parte del guion que corresponda a LO QUE SE VE, respetando el orden narrativo. UNA "
+                  "línea por toma, parafraseando el guion para que quepa hablado en la duración de la toma "
+                  "(~2.5 palabras/seg). Si una toma NO encaja con ninguna parte del guion, dejá su línea VACÍA "
+                  "(\"\") en lugar de forzar texto. El texto sale EXCLUSIVAMENTE del guion dado; nada inventado, "
+                  "sin marcas ni tonos. Devolvé SOLO JSON: {\"lines\": {\"<n>\": \"<texto>\"}}.")
+        lst = "\n".join(f'{r["n"]}) {r["dur"]}s · máx≈{int(r["dur"]*2.5)} palabras' for r in rows)
+        nums = ", ".join(str(r["n"]) for r in rows)
+        user = (f"GUION EN PROSA (única fuente del texto):\n{prose.strip()}\n\n"
+                f"TOMAS (n · duración · máx palabras):\n{lst}\n\n"
+                f"Siguen {len(imgs)} fotogramas, uno por toma EN ESTE ORDEN: {nums}. Devolvé el JSON.")
+    else:
+        system = ("Sos editor de voz en off para un corto animado. Distribuís el GUION EN PROSA entre las tomas, "
+                  "UNA línea por toma, parafraseando para que quepa en la duración de cada toma (~2.5 pal/seg). "
+                  "El texto sale EXCLUSIVAMENTE del guion; si una toma no encaja, dejala vacía. Usá título/acción "
+                  "para decidir el reparto. Sin marcas ni tonos. SOLO JSON: {\"lines\": {\"<n>\": \"<texto>\"}}.")
+        lst = "\n".join(f'{r["n"]}) {r["dur"]}s · máx≈{int(r["dur"]*2.5)} palabras · {r["title"]} · acción: {r["motion"][:120]}' for r in rows)
+        user = f"GUION EN PROSA:\n{prose.strip()}\n\nTOMAS:\n{lst}\n\nDevolvé el JSON, una línea por toma."
     try:
-        txt = llm.complete(system, user, max_tokens=8192)   # holgado: modelos "thinking" gastan tokens de salida
+        txt = llm.complete(system, user, max_tokens=8192, images=imgs)   # holgado (modelos 'thinking' gastan salida)
     except Exception as e:
         return {"error": f"LLM: {type(e).__name__}: {str(e)[:160]}"}
     clean = re.sub(r"^```(?:json)?|```$", "", (txt or "").strip(), flags=re.M).strip()   # quita fences ```json
@@ -209,7 +244,7 @@ def vo_distribute(project, prose):
         return {"error": "JSON inválido del LLM", "raw": txt[:400]}
     src = data.get("lines", data)
     lines = {str(k): (v or "").strip() for k, v in src.items()}
-    return {"ok": True, "lines": lines}
+    return {"ok": True, "lines": lines, "vision": bool(imgs), "frames": len(imgs)}
 
 
 def vo_run(project, lines=None, voice_id=None):

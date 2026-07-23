@@ -44,12 +44,14 @@ def available(): return provider() is not None
 
 
 # ---------------- completado ----------------
-def complete(system, user, max_tokens=2048, temperature=0.4):
+def complete(system, user, max_tokens=2048, temperature=0.4, images=None):
+    """images (opcional): lista de {'mime','b64'} para prompts MULTIMODALES (solo Vertex/Gemini)."""
     p = provider()
     if not p:
         raise RuntimeError("Sin credencial LLM: logueate con gcloud (Vertex/Gemini) o poné "
                            "ANTHROPIC_API_KEY/OPENAI_API_KEY (ver .env.example).")
-    if p == "vertex":  return _vertex(system, user, max_tokens, temperature)
+    if p == "vertex":  return _vertex(system, user, max_tokens, temperature, images)
+    if images: raise RuntimeError("El análisis de imágenes requiere Vertex/Gemini (gcloud login).")
     if p == "anthropic": return _anthropic(system, user, max_tokens, temperature)
     return _openai(system, user, max_tokens, temperature)
 
@@ -60,7 +62,7 @@ def _post_json(url, body, headers, timeout=120):
         return json.loads(r.read())
 
 
-def _vertex(system, user, max_tokens, temperature):
+def _vertex(system, user, max_tokens, temperature, images=None):
     proj = _gcp_project()
     if not proj: raise RuntimeError("No hay proyecto GCP (gcloud config set project … o GCP_PROJECT).")
     tok = _gcp_token()
@@ -69,8 +71,11 @@ def _vertex(system, user, max_tokens, temperature):
     host = "aiplatform.googleapis.com" if loc == "global" else f"{loc}-aiplatform.googleapis.com"
     forced = os.environ.get("GEMINI_MODEL") or os.environ.get("LLM_MODEL")
     models = [forced] if forced else ([_vertex_model[0]] if _vertex_model[0] else VERTEX_CANDIDATES)
+    parts = [{"text": user}]
+    for im in (images or []):
+        parts.append({"inlineData": {"mimeType": im["mime"], "data": im["b64"]}})
     body = {"systemInstruction": {"parts": [{"text": system}]},
-            "contents": [{"role": "user", "parts": [{"text": user}]}],
+            "contents": [{"role": "user", "parts": parts}],
             "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens}}
     last = None
     for mdl in models:
