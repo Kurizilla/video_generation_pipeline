@@ -51,6 +51,18 @@ export const api = {
   // --- cola global de jobs (tracker) ---
   jobs: () => get('/api/jobs'),
   jobsClear: () => post('/api/jobs/clear'),
+  job: (jid) => get('/api/job/' + jid),
+
+  // --- post-producción: 4 pasos discretos ---
+  postState: () => get('/api/post/state'),
+  postUnify: () => post('/api/post/unify'),
+  postVoPrep: (body) => post('/api/post/vo/prep', body),
+  postVoDistribute: (body) => post('/api/post/vo/distribute', body),
+  postVo: (body) => post('/api/post/vo', body),
+  postSubs: () => post('/api/post/subs'),
+  postSubsEdit: (content) => fetch(API + '/api/post/subs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) }).then(asJson),
+  postMaster: (body) => post('/api/post/master', body),
+  postRevert: (body) => post('/api/post/revert', body),
 
   // --- reemplazo MANUAL por archivo local (upload) ---
   kfUpload: (stem, file) => { const f = new FormData(); f.append('stem', stem); f.append('file', file); return postForm('/api/kf/upload', f) },

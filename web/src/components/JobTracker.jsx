@@ -11,7 +11,7 @@ export default function JobTracker() {
   const anyDone = jobs.some((j) => j.done)
 
   const icon = (j) => (j.errors?.length ? '⚠' : j.done ? '✓' : '⏳')
-  const kindIcon = (k) => (k === 'vid' ? '🎬' : '🖼')
+  const kindIcon = (k) => (k === 'vid' ? '🎬' : k === 'post' ? '🎞' : '🖼')
 
   return (
     <div className="jobtracker">

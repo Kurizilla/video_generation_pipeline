@@ -3,14 +3,14 @@ import { useStore } from './store.jsx'
 import AnchorsStage from './components/AnchorsStage.jsx'
 import KeyframesStage from './components/KeyframesStage.jsx'
 import ShotsStage from './components/ShotsStage.jsx'
-import MasterStage from './components/MasterStage.jsx'
+import PostProdStage from './components/PostProdStage.jsx'
 import JobTracker from './components/JobTracker.jsx'
 
 const STAGES = [
   { id: 'anchors', label: 'Personajes / Sets' },
   { id: 'keyframes', label: 'Keyframes' },
   { id: 'shots', label: 'Shots' },
-  { id: 'master', label: 'Master' },
+  { id: 'post', label: 'Post-producción' },
 ]
 
 export default function App() {
@@ -36,9 +36,9 @@ export default function App() {
         <span className={`badge ${project?.paid ? 'paid' : 'dry'}`}>{project?.paid ? 'PAGA' : 'DRY'}</span>
         {stale > 0 && <span className="badge stale">{stale} stale</span>}
         {pending > 0 && <span className="badge">{pending} sin video</span>}
-        <button className="go" disabled={!ready.ready} onClick={() => setStage('master')}
-                title={ready.ready ? 'Listo para armar el master' : 'Faltan tomas aprobadas o hay STALE'}>
-          GO · Master
+        <button className="go" onClick={() => setStage('post')}
+                title="Post-producción: unificar → VO → subtítulos → master">
+          GO · Post-producción
         </button>
       </header>
 
@@ -52,7 +52,7 @@ export default function App() {
         {stage === 'anchors' && <AnchorsStage />}
         {stage === 'keyframes' && <KeyframesStage />}
         {stage === 'shots' && <ShotsStage />}
-        {stage === 'master' && <MasterStage />}
+        {stage === 'post' && <PostProdStage />}
       </div>
 
       {toast && <div className="toast">{toast}</div>}

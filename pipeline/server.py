@@ -195,6 +195,62 @@ def build_app(project):
         dest.write_bytes(await file.read())
         return {"ok": True, "id": id}
 
+    # -------- post-producción: 4 pasos discretos (unify → vo → subs → master) --------
+    from . import postprod
+
+    def _bg(kind, label, fn):
+        """Corre un paso en segundo plano (aparece en la cola global); guarda result/error en el job."""
+        jid = _mk_job(kind, label, 1)
+        def run():
+            try:
+                r = fn()
+                with _LOCK:
+                    _JOBS[jid]["result"] = r
+                    if isinstance(r, dict) and r.get("error"): _JOBS[jid]["errors"].append(str(r["error"])[:180])
+                    else: _JOBS[jid]["variants"].append(r)
+            except Exception as ex:
+                with _LOCK: _JOBS[jid]["errors"].append(f"{type(ex).__name__}: {str(ex)[:180]}")
+            with _LOCK: _JOBS[jid]["done"] = True
+        threading.Thread(target=run, daemon=True).start()
+        return jid
+
+    @app.get("/api/job/{jid}")
+    def any_job(jid): return _JOBS.get(jid, {"error": "job desconocido"})
+
+    @app.get("/api/post/state")
+    def post_state(): return postprod.state(project)
+
+    @app.post("/api/post/unify")            # PASO 1 (gratis, ffmpeg) — background
+    def post_unify(): return {"job_id": _bg("post", "unificar", lambda: postprod.unify(project))}
+
+    @app.post("/api/post/vo/prep")          # PASO 2 plan + costo estimado (NO gasta)
+    def post_vo_prep(body: dict = Body(default={})): return postprod.vo_prep(project, body.get("lines"))
+
+    @app.post("/api/post/vo/distribute")    # PASO 2 asistente: prosa → 1 línea por toma con IA
+    def post_vo_distribute(body: dict = Body(...)): return postprod.vo_distribute(project, body.get("prose", ""))
+
+    @app.post("/api/post/vo")               # PASO 2 (paga si LOOP_ALLOW_PAID) — background
+    def post_vo(body: dict = Body(default={})):
+        return {"job_id": _bg("post", "VO", lambda: postprod.vo_run(project, body.get("lines"), body.get("voice_id")))}
+
+    @app.post("/api/post/subs")             # PASO 3 (gratis) — rápido, síncrono
+    def post_subs(): return postprod.subs(project)
+
+    @app.put("/api/post/subs")              # editar subtítulos a mano (nueva versión)
+    def post_subs_edit(body: dict = Body(...)): return postprod.subs_edit(project, body.get("content", ""))
+
+    @app.post("/api/post/master")           # PASO 4 (gratis) — gate + background
+    def post_master(body: dict = Body(default={})):
+        mm = postprod._load(project)
+        st = {s: postprod._status(project, mm, s) for s in ("unify", "vo", "subs")}
+        if any(v != "ready" for v in st.values()):
+            bad = [s for s, v in st.items() if v != "ready"]
+            return {"gated": True, "steps": st, "reason": f"rehacé primero: {', '.join(bad)} (deben estar 'listo', sin STALE)"}
+        return {"job_id": _bg("post", "master", lambda: postprod.master(project, body.get("music")))}
+
+    @app.post("/api/post/revert")
+    def post_revert(body: dict = Body(...)): return postprod.revert(project, body["step"], body["v"])
+
     return app
 
 

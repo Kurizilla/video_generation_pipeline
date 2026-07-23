@@ -48,13 +48,27 @@ sin llamar a ningún modelo.
 - **Regla (propagación):** editar/aceptar un keyframe marca como **`STALE`** todos los videos que lo
   usan (incluidos los dos lados de un seam compartido). El master no se puede armar con tomas `STALE`.
 
-### 5. `assemble` — master final (GATE "GO")
-- **Módulo:** `pipeline/assemble.py`
-- **Consume:** los `toma<NN>.mp4` aprobados + los textos de voz en off de cada toma (`tomas[].vo`).
-- **Produce:** `out/master_raw.mp4` (concat) y `out/master.mp4` (con VO + subtítulos + música).
-- **Pasos:** `build_master_raw` (concat ffmpeg) → `synth_vo` (ElevenLabs, `pipeline/tts.py`) →
-  `_render_sub` (subtítulos) → `build_final` (mux VO + subs + música con ffmpeg).
-- **Gate:** solo corre si no hay tomas `STALE` (`deps.assembly_ready`).
+### 5. Post-producción — 4 pasos DISCRETOS (reemplaza el `assemble` encadenado)
+- **Módulo:** `pipeline/postprod.py` (el viejo `assemble.py` queda como helpers ffmpeg + CLI legacy).
+- **Manifiesto:** `out/postprod.json` — una entrada por paso, versionada, cada versión guarda su
+  `dep_sig` (firma de insumos). Estado por paso: `pending` / `ready` / `stale`.
+- **Pasos (cada uno con botón, artefacto versionado y gate propios; reintentables por separado):**
+  1. **`unify`** (gratis): concat de shots aprobados → `post/unified.vN.mp4` + timeline de cortes.
+     STALE si cambia una versión/estado de shot.
+  2. **`vo`** (paga): una línea por toma (`tomas[].vo`, editable) → ElevenLabs, timeada a los cortes del
+     unificado → `post/vo.vN/` + `post/vo_script.vN.json`. Idempotente (cachea por línea). Respeta el
+     candado (`vo_prep` = plan + costo estimado sin gastar). STALE si cambia `unify`.
+     - **Asistente `vo_distribute`** (opcional, usa LLM `pipeline/llm.py`): pega un guion en PROSA y la IA
+       lo reparte en 1 línea por toma según título/acción/duración de cada toma. Solo texto (sin tonos ni
+       pausas). Requiere `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` + server en PAGA. Puebla las casillas; el
+       usuario revisa antes de sintetizar.
+  3. **`subs`** (gratis): SRT verbatim desde el script temporizado de la VO → `post/subs.vN.srt`,
+     editable a mano (nueva versión). STALE si cambia `vo`.
+  4. **`master`** (gratis): mux unificado + VO (adelay por toma) + subtítulos (overlays PNG, sin libass)
+     + música → `post/master.vN.mp4` (+ copia a `out/master.mp4`). **Gate:** solo si 1-3 están `ready` y
+     ninguno `stale`.
+- **STALE aguas abajo:** regenerar un shot → `unify` stale; re-unificar → `vo` stale; nueva VO → `subs` y
+  `master` stale. El front dice qué rehacer. Todo versionado y revertible (`revert(step, v)`).
 
 ### Edición (usada por el front, no es una etapa CLI)
 - **Módulo:** `pipeline/editing.py`
@@ -123,7 +137,20 @@ sirven en `GET /out/<ruta relativa a project.out>` (sigue symlinks, con guarda a
 | Método | Ruta | Cuerpo |
 |---|---|---|
 | POST | `/api/stage/{name}` | `{only?}` — dispara anchors/keyframes/shots |
-| POST | `/api/assemble` | dispara el GO (unificación + VO + subs) |
+| POST | `/api/assemble` | GO encadenado legacy (unificación + VO + subs) |
+
+### Post-producción (4 pasos discretos)
+| Método | Ruta | Nota |
+|---|---|---|
+| GET | `/api/post/state` | estado + versiones + artefacto de cada paso; `master.can_build` |
+| POST | `/api/post/unify` | PASO 1 (job en background) |
+| POST | `/api/post/vo/prep` | PASO 2 plan + costo estimado (no gasta) |
+| POST | `/api/post/vo/distribute` | PASO 2 asistente IA: `{prose}` → `{lines:{n:texto}}` |
+| POST | `/api/post/vo` | PASO 2 síntesis (job; paga si `LOOP_ALLOW_PAID`) |
+| POST · PUT | `/api/post/subs` | PASO 3 generar · editar (nueva versión) |
+| POST | `/api/post/master` | PASO 4 (gate 1-3 ready+no stale; job) |
+| POST | `/api/post/revert` | `{step, v}` — revertir cualquier paso |
+| GET | `/api/job/{jid}` | estado de un job de post-producción |
 
 ### Edición (jobs async: devuelven `job_id`, se sondea `.../status/{jid}`)
 | Método | Ruta | Cuerpo |
