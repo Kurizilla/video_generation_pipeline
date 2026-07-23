@@ -45,7 +45,7 @@ def _blend(base_path, edited_path, mask_path, dest):
 
 # ================= KEYFRAMES =================
 def kf_prep(project, stem, mode="A", comment="", instruction="", ref_images=None, hifi=False,
-            strength=0.6, mask_png=None, num_variants=2, prompt=None):
+            strength=0.6, mask_png=None, num_variants=2, prompt=None, base_refs=None):
     meta = _load(project.kf_meta)
     if stem not in meta:
         return {"error": f"keyframe desconocido: {stem}"}
@@ -53,7 +53,10 @@ def kf_prep(project, stem, mode="A", comment="", instruction="", ref_images=None
     if mode == "A":
         base = prompt if (prompt is not None and prompt.strip()) else e["prompt"]  # prompt original editable desde el front
         prompt = base + ("\n\nADJUSTMENT (keep everything else the same): " + comment if comment else "")
-        anchors = [project.resolve_ref(r) for r in e.get("refs", [])]
+        # refs del prompt: si el front manda base_refs, se usan EXACTAMENTE esas (control 100%);
+        # si no, se usan las del keyframe (comportamiento previo).
+        src_refs = base_refs if base_refs is not None else e.get("refs", [])
+        anchors = [project.resolve_ref(r) for r in src_refs]
         anchors = [a for a in anchors if a.is_file()]
         refs = (_resolve_refs(project, ref_images) + anchors)[:14]
         return {"stem": stem, "mode": "A", "model": model, "prompt": prompt, "refs": refs,

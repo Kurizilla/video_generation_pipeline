@@ -15,6 +15,7 @@ export default function KeyframeEditor({ stem }) {
   const [instruction, setInstruction] = useState('')
   const [hifi, setHifi] = useState(true)
   const [refs, setRefs] = useState([])
+  const [baseRefs, setBaseRefs] = useState([])   // refs propias del prompt (anchors), editables
   const [nvar, setNvar] = useState(2)
   const [variants, setVariants] = useState([])
   const [status, setStatus] = useState('')
@@ -26,6 +27,7 @@ export default function KeyframeEditor({ stem }) {
   const load = async () => {
     const m = await api.kfMeta(stem); setMeta(m); setDeps(await api.depsFor(stem))
     setPrompt(m.prompt || '')
+    setBaseRefs((m.ref_imgs || []).map((r) => ({ ...r, keep: true })))   // refs del prompt (editables)
     setVariants((await api.kfVariants(stem)).variants); setRefs([]); setComment(''); setInstruction(''); setStatus(''); setBusy(false)
   }
   useEffect(() => { load() }, [stem])
@@ -38,7 +40,7 @@ export default function KeyframeEditor({ stem }) {
   const regen = async () => {
     const myStem = stem
     const body = { stem: myStem, mode, num_variants: nvar, ref_images: refs }
-    if (mode === 'A') { body.prompt = prompt; body.comment = comment; body.hifi = hifi }
+    if (mode === 'A') { body.prompt = prompt; body.comment = comment; body.hifi = hifi; body.base_refs = baseRefs.filter((r) => r.keep).map((r) => r.ref) }
     else {
       if (maskRef.current?.isEmpty()) { flash('Dibujá una máscara primero'); return }
       body.instruction = instruction; body.mask_png = maskRef.current.getMaskPng(); body.strength = 0.6
@@ -108,6 +110,20 @@ export default function KeyframeEditor({ stem }) {
           </div>
           <textarea rows={6} value={prompt} onChange={(e) => setPrompt(e.target.value)}
                     placeholder="prompt base del keyframe" />
+          <div className="lbl">Imágenes de referencia del prompt (clic para incluir/quitar)</div>
+          {baseRefs.length ? (
+            <div className="refstrip">
+              {baseRefs.map((r, i) => (
+                <div key={r.ref} className="baseref" title={r.ref}
+                     onClick={() => setBaseRefs((x) => x.map((y, j) => j === i ? { ...y, keep: !y.keep } : y))}>
+                  {r.under_out && r.exists
+                    ? <img src={outUrl(r.out)} alt={r.ref} style={{ opacity: r.keep ? 1 : 0.25 }} />
+                    : <span className="muted" style={{ opacity: r.keep ? 1 : 0.35 }}>{r.ref}</span>}
+                  <span className="baseref-tag">{r.keep ? '✓' : '✗'}</span>
+                </div>
+              ))}
+            </div>
+          ) : <span className="muted">este prompt no tiene refs propias</span>}
           <div className="lbl">Comentario / ajuste extra (opcional, se suma al prompt)</div>
           <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)}
                     placeholder="el niño de atrás debe ser un niño, como en la referencia" />

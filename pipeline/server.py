@@ -123,7 +123,16 @@ def build_app(project):
     def tomas(): return _view_tomas(project)
 
     @app.get("/api/kf/{stem}")
-    def kf_meta(stem): return editing._load(project.kf_meta).get(stem, {"error": "no existe"})
+    def kf_meta(stem):
+        e = editing._load(project.kf_meta).get(stem)
+        if not e: return {"error": "no existe"}
+        imgs = []
+        for r in e.get("refs", []):
+            p = project.resolve_ref(r)
+            try: rel = str(p.relative_to(project.out)); under = True
+            except ValueError: rel, under = None, False
+            imgs.append({"ref": r, "out": rel, "under_out": under, "exists": p.is_file()})
+        return {**e, "ref_imgs": imgs}
 
     @app.get("/api/vid/{key}")
     def vid_meta(key): return editing._load(project.shots_meta).get(key, {"error": "no existe"})
@@ -143,7 +152,8 @@ def build_app(project):
         n = int(body.get("num_variants", 2))
         plan = editing.kf_prep(project, body["stem"], body.get("mode", "A"), body.get("comment", ""),
                                body.get("instruction", ""), body.get("ref_images", []), body.get("hifi", False),
-                               body.get("strength", 0.6), body.get("mask_png"), n, prompt=body.get("prompt"))
+                               body.get("strength", 0.6), body.get("mask_png"), n, prompt=body.get("prompt"),
+                               base_refs=body.get("base_refs"))
         if "error" in plan: return plan
         if not falx.paid_enabled(): return {"dry": True, "model": plan["model"], "est_cost_usd": plan["est_cost_usd"]}
         jid = _mk_job("kf", body["stem"], n)
