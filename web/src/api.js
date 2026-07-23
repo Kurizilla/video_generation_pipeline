@@ -78,6 +78,7 @@ export const api = {
   // --- edición estructural del timeline ---
   tlDeleteKeyframe: (stem) => post('/api/timeline/delete-keyframe', { stem }),
   tlInsertKeyframe: (body) => post('/api/timeline/insert-keyframe', body),
+  tlAddToma: (body) => post('/api/timeline/add-toma', body),
 
   // --- reemplazo MANUAL por archivo local (upload) ---
   kfUpload: (stem, file) => { const f = new FormData(); f.append('stem', stem); f.append('file', file); return postForm('/api/kf/upload', f) },

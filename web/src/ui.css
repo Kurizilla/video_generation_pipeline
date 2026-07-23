@@ -86,3 +86,12 @@ a { color: var(--accent); }
 /* selector de proyecto en el header */
 .projsel { background: var(--panel2); color: var(--fg); border: 1px solid var(--line); border-radius: 8px;
   padding: 5px 8px; font-size: 13px; max-width: 200px; }
+
+/* Barra de inserción de toma (estilo PowerPoint): gap fino; al hover, línea + "+" verde */
+.insbar { position: relative; height: 8px; margin: 1px 0; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.insbar .plus { opacity: 0; transition: opacity .12s; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--ok); color: #fff; font-size: 15px; line-height: 20px; text-align: center; z-index: 2;
+  border: 2px solid var(--accent); box-shadow: 0 0 0 3px var(--bg); }
+.insbar::before { content: ""; position: absolute; left: 6px; right: 6px; height: 2px; background: var(--accent);
+  opacity: 0; transition: opacity .12s; border-radius: 2px; }
+.insbar:hover .plus, .insbar:hover::before { opacity: 1; }

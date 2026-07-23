@@ -111,6 +111,28 @@ def delete_keyframe(project, stem):
     return r
 
 
+def add_toma(project, after, duration=6):
+    """Inserta una toma NUEVA (con 2 keyframes nuevos vacíos) DESPUÉS de `after` tomas (0 = al inicio,
+    N = al final). Hay que definir/generar esos 2 keyframes y el video. Renumera y re-mapea los crudos."""
+    tomas = sorted(project.data["tomas"], key=lambda t: t["n"])
+    after = int(after)
+    if after < 0 or after > len(tomas):
+        return {"error": f"posición inválida ({after}); rango 0..{len(tomas)}"}
+    snap = _snapshot(project)
+    tok = int(time.time() * 1000)
+    start, end = f"ins{tok}_start", f"ins{tok}_end"
+    project.data.setdefault("keyframes", {})[start] = {"prompt": "", "refs": []}
+    project.data["keyframes"][end] = {"prompt": "", "refs": []}
+    newt = {"n": after + 1, "code": f"ins{tok}", "title": "toma nueva", "start": start, "end": end,
+            "duration": int(duration), "static": False, "motion": "", "vo": "", "_src": None}
+    new_tomas = tomas[:after] + [newt] + tomas[after:]     # insertar en la posición
+    r = _remap_and_finish(project, new_tomas, snap)
+    r["effect"] = f"toma nueva insertada en posición {after + 1}; definí y generá sus 2 keyframes y su video"
+    r["new_toma"] = after + 1
+    r["new_keyframes"] = [start, end]
+    return r
+
+
 def insert_keyframe(project, toma_n, new_stem, prompt="", refs=None, dur_split=None):
     tomas = sorted(project.data["tomas"], key=lambda t: t["n"])
     X = next((t for t in tomas if t["n"] == int(toma_n)), None)

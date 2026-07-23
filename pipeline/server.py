@@ -316,6 +316,10 @@ def build_app(project):
         return timeline.insert_keyframe(project, body["toma_n"], body.get("new_stem", ""),
                                         body.get("prompt", ""), body.get("refs"), body.get("dur_split"))
 
+    @app.post("/api/timeline/add-toma")
+    def tl_add_toma(body: dict = Body(...)):
+        return timeline.add_toma(project, body.get("after", 0), body.get("duration", 6))
+
     @app.post("/api/batch/run")
     def batch_run():
         jid = _mk_job("batch", "keyframes+shots", 1)
