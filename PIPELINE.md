@@ -58,6 +58,11 @@ sin llamar a ningún modelo.
   2. **`vo`** (paga): una línea por toma (`tomas[].vo`, editable) → ElevenLabs, timeada a los cortes del
      unificado → `post/vo.vN/` + `post/vo_script.vN.json`. Idempotente (cachea por línea). Respeta el
      candado (`vo_prep` = plan + costo estimado sin gastar). STALE si cambia `unify`.
+     - **Scheduling sin solapamiento:** cada línea arranca en su toma pero nunca antes de que termine la
+       anterior (+`VO_GAP`), así dos voces jamás se pisan (fluidez). El `start` agendado se guarda en el
+       script (subs y master lo leen → quedan en sync). El artefacto incluye un **QA** (`_vo_qa`):
+       `overlap_free`, corrimiento por línea (avisa las que quedaron muy corridas → acortar texto),
+       y `tail_overflow` si la VO se pasa del largo del video.
      - **Asistente `vo_distribute`** (opcional, usa LLM `pipeline/llm.py`): pega un guion en PROSA y la IA
        lo reparte en 1 línea por toma según título/acción/duración de cada toma. Solo texto (sin tonos ni
        pausas). Requiere `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` + server en PAGA. Puebla las casillas; el

@@ -15,6 +15,8 @@ from . import falx, tts, editing, assemble
 
 POST = "post"                       # subcarpeta de artefactos versionados: project.out/post/
 MANIFEST = "postprod.json"
+VO_GAP = 0.12                       # silencio mínimo entre líneas de VO (s) — evita que se pisen, sin pausas largas
+VO_DRIFT_WARN = 0.5                 # aviso QA: línea que quedó > este corrimiento respecto a su toma (s)
 
 
 # ---------------- estado / versionado ----------------
@@ -135,6 +137,32 @@ def vo_prep(project, lines=None):
     return {"plan": plan, "to_synth": len(to_synth), "chars": chars, "est_cost_usd": est,
             "voice_id": project.voice_id, "paid": falx.paid_enabled()}
 
+def _vo_qa(script, video_dur):
+    """QA de cómo quedaron los audios: solapamiento (garantizado 0 por el scheduling), corrimiento de
+    cada línea respecto a su toma, y si la VO se pasa del largo del video (se cortaría por -shortest)."""
+    drifted = [{"n": s["n"], "drift": s["drift"]} for s in script if s["drift"] > VO_DRIFT_WARN]
+    # línea cuya locución sigue sonando cuando visualmente ya empezó la toma siguiente (informativo)
+    lag = []
+    for a, b in zip(script, script[1:]):
+        over = (a["start"] + a["audio_dur"]) - b["toma_start"]
+        if over > 0.03:
+            lag.append({"n": a["n"], "sigue_en": b["n"], "ms": int(round(over * 1000))})
+    tail = round(script[-1]["start"] + script[-1]["audio_dur"], 3) if script else 0.0
+    return {"overlap_free": True,                         # el scheduling impide que dos pistas se pisen
+            "lines": len(script),
+            "max_drift": round(max((s["drift"] for s in script), default=0.0), 3),
+            "drifted_lines": drifted,                     # quedaron corridas (acortá su texto para recuperar sync)
+            "lagging_lines": lag,                         # narración que cruza el corte visual (normal, informativo)
+            "vo_end": tail, "video_dur": round(video_dur, 3),
+            "tail_overflow": round(max(0.0, tail - video_dur), 3)}   # >0 => la VO se pasa del video
+
+
+def vo_qa(project):
+    """Devuelve el QA de la versión de VO actual (para el front)."""
+    vo = _cur_entry(_load(project), "vo")
+    return vo.get("qa") if vo else {"error": "no hay VO generada"}
+
+
 def vo_distribute(project, prose):
     """IA: reparte/adapta un guion en PROSA entre las tomas (1 línea por toma), ajustando a la duración
     de cada toma. La IA recibe título/acción/duración/línea-actual de cada toma. Solo texto, sin marcas.
@@ -206,22 +234,29 @@ def vo_run(project, lines=None, voice_id=None):
         return {"dry": True, **vo_prep(project, lines)}    # no snapshotea: mostrá el estimado y esperá PAGA
     # snapshot de la versión
     d = _dir(project); v = _next_v(m, "vo"); vdir = d / f"vo.v{v}"; vdir.mkdir(parents=True, exist_ok=True)
-    script = []
+    # SCHEDULING sin solapamiento: cada línea arranca en su toma, pero NUNCA antes de que termine la
+    # anterior (+ VO_GAP). Garantiza fluidez (dos voces nunca se pisan) sin pausas largas. Los subs y el
+    # master leen este 'start' ya agendado, así que quedan en sync con el audio real.
+    script = []; prev_end = 0.0
     for it in ls:
         if not it["text"]: continue
-        src = project.vo_path(it["idx"])
-        seg_dur = 0.0
+        src = project.vo_path(it["idx"]); seg_dur = 0.0
         if src.is_file():
             shutil.copy2(src, vdir / f"line_{it['idx']}.mp3"); seg_dur = assemble._dur(src)
-        c = cuts.get(it["n"], {})
+        c = cuts.get(it["n"], {}); toma_start = float(c.get("t0") or 0.0)
+        start = max(toma_start, prev_end + (VO_GAP if prev_end > 0 else 0.0))
+        prev_end = start + seg_dur
         script.append({"n": it["n"], "idx": it["idx"], "text": it["text"],
-                       "start": c.get("t0"), "toma_dur": c.get("dur"), "audio_dur": round(seg_dur, 3)})
+                       "toma_start": round(toma_start, 3), "start": round(start, 3),
+                       "toma_dur": c.get("dur"), "audio_dur": round(seg_dur, 3),
+                       "drift": round(start - toma_start, 3)})
+    qa = _vo_qa(script, u["dur"])
     (d / f"vo_script.v{v}.json").write_text(json.dumps(script, ensure_ascii=False, indent=2))
     _register(project, m, "vo",
               {"dir": f"{POST}/vo.v{v}", "script": f"{POST}/vo_script.v{v}.json", "voice_id": vid,
-               "lines": [x["text"] for x in ls]}, f"unify:{_cur(m, 'unify')}")
+               "lines": [x["text"] for x in ls], "qa": qa}, f"unify:{_cur(m, 'unify')}")
     _save(project, m)
-    return {"ok": True, "v": v, "voice_id": vid, "script": script}
+    return {"ok": True, "v": v, "voice_id": vid, "script": script, "qa": qa}
 
 
 # ================= PASO 3 — SUBTÍTULOS =================

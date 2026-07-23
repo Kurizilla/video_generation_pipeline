@@ -44,6 +44,23 @@ function Versions({ step, versions, current, onRevert }) {
   )
 }
 
+function QaPanel({ qa }) {
+  return (
+    <div style={{ marginTop: 8, padding: '8px 10px', border: '1px solid var(--line)', borderRadius: 8 }}>
+      <div className="lbl" style={{ marginTop: 0 }}>QA de audio</div>
+      <div className="muted">
+        {qa.overlap_free ? '✓ sin solapamiento entre líneas' : '⚠ hay solapamiento'} · corrimiento máx {qa.max_drift}s · VO {qa.vo_end}s / video {qa.video_dur}s
+      </div>
+      {qa.tail_overflow > 0 &&
+        <div style={{ color: '#ffb4a2', marginTop: 3 }}>⚠ la VO se pasa {qa.tail_overflow}s del video (se cortaría) — acortá alguna línea</div>}
+      {qa.drifted_lines?.length > 0 &&
+        <div style={{ color: '#ffcf9e', marginTop: 3 }}>⚠ corridas del inicio de su toma: {qa.drifted_lines.map((x) => `toma ${x.n} (+${x.drift}s)`).join(', ')} — acortá su texto</div>}
+      {qa.lagging_lines?.length > 0 &&
+        <div className="muted" style={{ marginTop: 3 }}>narración que cruza el corte visual: {qa.lagging_lines.map((x) => `t${x.n}→t${x.sigue_en} ${x.ms}ms`).join(', ')}</div>}
+    </div>
+  )
+}
+
 export default function PostProdStage() {
   const { flash } = useStore()
   const [st, setSt] = useState(null)
@@ -164,6 +181,7 @@ export default function PostProdStage() {
               </div>
             ))}
           </>}
+        {A('vo')?.qa && <QaPanel qa={A('vo').qa} />}
         <Versions step="vo" versions={st.vo.versions} current={st.vo.current} onRevert={revert} />
       </StepCard>
 
