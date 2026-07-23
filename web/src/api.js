@@ -75,6 +75,10 @@ export const api = {
   postMaster: (body) => post('/api/post/master', body),
   postRevert: (body) => post('/api/post/revert', body),
 
+  // --- edición estructural del timeline ---
+  tlDeleteKeyframe: (stem) => post('/api/timeline/delete-keyframe', { stem }),
+  tlInsertKeyframe: (body) => post('/api/timeline/insert-keyframe', body),
+
   // --- reemplazo MANUAL por archivo local (upload) ---
   kfUpload: (stem, file) => { const f = new FormData(); f.append('stem', stem); f.append('file', file); return postForm('/api/kf/upload', f) },
   vidUpload: (key, file) => { const f = new FormData(); f.append('key', key); f.append('file', file); return postForm('/api/vid/upload', f) },

@@ -66,6 +66,12 @@ export default function KeyframeEditor({ stem }) {
     }
   }
   const revert = async (v) => { const r = await api.kfRevert({ stem, v }); if (r.ok) { flash('Revertido a v' + v); await refresh(); await load() } }
+  const delKeyframe = async () => {
+    if (!window.confirm(`¿Borrar el keyframe "${stem}"? Fusiona/colapsa las tomas del corte y deja el video para regenerar. (Hay snapshot revertible.)`)) return
+    const r = await api.tlDeleteKeyframe(stem)
+    if (r.error) { flash('Error: ' + r.error); return }
+    flash(r.effect + ' — recargando…'); setTimeout(() => window.location.reload(), 1200)
+  }
   const uploadLocal = async (file) => {
     if (!file) return
     setStatus('Subiendo imagen local…')
@@ -147,6 +153,12 @@ export default function KeyframeEditor({ stem }) {
           </span>
         ))}
       </div>
+
+      <div className="lbl">Estructura del timeline</div>
+      <button className="bad" onClick={delKeyframe}>🗑 Borrar keyframe (fusiona las tomas adyacentes)</button>
+      <span className="muted" style={{ marginLeft: 8 }}>
+        borra este frame-frontera y une la toma que termina acá con la siguiente (kf_n→kf_n+1 + kf_n+1→kf_n+2 ⇒ kf_n→kf_n+2)
+      </span>
     </div>
   )
 }

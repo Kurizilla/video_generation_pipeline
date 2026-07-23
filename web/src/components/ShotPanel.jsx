@@ -63,6 +63,13 @@ export default function ShotPanel({ tkey }) {
     if (r.ok) { flash('Video reemplazado (manual) v' + r.current); await refresh(); await load() }
     else setStatus('Error: ' + (r.error || 'upload'))
   }
+  const splitToma = async () => {
+    const stem = window.prompt('Nombre del keyframe nuevo a insertar (ej: ' + tkey + '_mid):', tkey + '_mid')
+    if (!stem) return
+    const r = await api.tlInsertKeyframe({ toma_n: meta.toma, new_stem: stem, prompt: '', refs: [] })
+    if (r.error) { flash('Error: ' + r.error); return }
+    flash(r.effect + ' — recargando…'); setTimeout(() => window.location.reload(), 1200)
+  }
 
   if (!meta) return <div className="muted">Cargando…</div>
   const hasVideo = (meta.versions || []).length > 0
@@ -114,6 +121,10 @@ export default function ShotPanel({ tkey }) {
         <input type="file" accept="video/*" hidden onChange={(e) => uploadLocal(e.target.files[0])} />
       </label>
       <span className="muted" style={{ marginLeft: 8 }}>se versiona (revertible) y queda aprobado</span>
+
+      <div className="lbl">Estructura del timeline</div>
+      <button onClick={splitToma}>➕ Dividir esta toma (insertar keyframe)</button>
+      <span className="muted" style={{ marginLeft: 8 }}>parte la toma en dos en el punto medio; después generá el keyframe nuevo y regenerá ambas</span>
 
       <div className="lbl">Variantes (histórico)</div>
       <Variants items={variants} kind="video" onAccept={accept} />

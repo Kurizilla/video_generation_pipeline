@@ -305,6 +305,17 @@ def build_app(project):
     @app.get("/api/batch/plan")
     def batch_plan(): return batch.plan(project)      # estimado, no gasta
 
+    # -------- edición estructural del timeline (borrar/insertar keyframe) --------
+    from . import timeline
+
+    @app.post("/api/timeline/delete-keyframe")
+    def tl_delete(body: dict = Body(...)): return timeline.delete_keyframe(project, body["stem"])
+
+    @app.post("/api/timeline/insert-keyframe")
+    def tl_insert(body: dict = Body(...)):
+        return timeline.insert_keyframe(project, body["toma_n"], body.get("new_stem", ""),
+                                        body.get("prompt", ""), body.get("refs"), body.get("dur_split"))
+
     @app.post("/api/batch/run")
     def batch_run():
         jid = _mk_job("batch", "keyframes+shots", 1)
