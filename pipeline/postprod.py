@@ -156,14 +156,17 @@ def vo_distribute(project, prose):
             sp = project.shot_path(t["n"]); d = assemble._dur(sp) if sp.is_file() else float(t.get("duration") or 5)
         rows.append({"n": t["n"], "title": t.get("title", ""), "motion": t.get("motion", ""),
                      "dur": round(float(d), 2), "current": t.get("vo", "")})
-    system = ("Sos editor de voz en off para un corto animado. Distribuís un guion en PROSA entre las tomas, "
-              "UNA línea por toma, adaptando el texto para que quepa hablado en la duración de cada toma "
-              "(ritmo ~2.5 palabras/seg). Respetá el sentido y el orden narrativo; usá el título y la acción "
-              "de cada toma para decidir qué frase va en cuál. Texto plano locutable, SIN marcas, acotaciones "
-              "ni tonos. Devolvé SOLO JSON: {\"lines\": {\"<n>\": \"<texto>\"}} con una entrada por toma.")
+    system = ("Sos editor de voz en off para un corto animado. Distribuís el GUION EN PROSA que te da el "
+              "usuario entre las tomas, UNA línea por toma, adaptando/parafraseando ese texto para que quepa "
+              "hablado en la duración de cada toma (ritmo ~2.5 palabras/seg). El contenido de cada línea debe "
+              "salir EXCLUSIVAMENTE de la prosa dada — NO reuses ni copies ningún guion anterior; si la prosa "
+              "cambia, la salida debe cambiar. Usá el título y la acción de cada toma solo para decidir qué "
+              "parte de la prosa va en cuál y respetar el orden narrativo. Texto plano locutable, SIN marcas, "
+              "acotaciones ni tonos. Devolvé SOLO JSON: {\"lines\": {\"<n>\": \"<texto>\"}}, una entrada por toma.")
     lst = "\n".join(f'{r["n"]}) {r["dur"]}s · máx≈{int(r["dur"]*2.5)} palabras · {r["title"]} · '
-                    f'acción: {r["motion"][:120]} · actual: "{r["current"]}"' for r in rows)
-    user = f"PROSA DE REFERENCIA:\n{prose.strip()}\n\nTOMAS:\n{lst}\n\nDevolvé el JSON con una línea por toma."
+                    f'acción: {r["motion"][:120]}' for r in rows)   # sin "actual": no anclar en el guion previo
+    user = (f"GUION EN PROSA A DISTRIBUIR (única fuente del texto):\n{prose.strip()}\n\n"
+            f"TOMAS (dónde repartirlo):\n{lst}\n\nDevolvé el JSON con una línea por toma, basada solo en la prosa.")
     try:
         txt = llm.complete(system, user, max_tokens=8192)   # holgado: modelos "thinking" gastan tokens de salida
     except Exception as e:
