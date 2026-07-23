@@ -90,6 +90,7 @@ def run(project, kf_workers=4, shot_workers=3, progress=None):
         for f in cf.as_completed(futs):
             n, status, err = f.result(); shot_res[n] = {"status": status, "error": err}
             _emit(phase="shots", toma=n, status=status, done=len(shot_res), total=len(tomas))
+    shots.build_meta(project)   # registra los crudos recién generados como v0 (para que el front los muestre)
     shot_failed = [{"toma": n, "error": r["error"]} for n, r in shot_res.items() if r["status"] == "fail"]
 
     ok_shots = sorted(n for n, r in shot_res.items() if r["status"] in ("ok", "cache"))
