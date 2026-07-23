@@ -144,7 +144,7 @@ def vo_distribute(project, prose):
     if not (prose or "").strip():
         return {"error": "pegá un guion en prosa primero"}
     if not llm.available():
-        return {"error": "Falta ANTHROPIC_API_KEY u OPENAI_API_KEY en .env para distribuir con IA (ver .env.example)."}
+        return {"error": "Sin credencial LLM: logueate con gcloud (Vertex/Gemini) o poné ANTHROPIC_API_KEY/OPENAI_API_KEY (ver .env.example)."}
     if not falx.paid_enabled():
         return {"error": "Distribuir con IA usa un LLM (pago). Poné el server en PAGA (LOOP_ALLOW_PAID=1)."}
     m = _load(project); u = _cur_entry(m, "unify")
@@ -165,16 +165,17 @@ def vo_distribute(project, prose):
                     f'acción: {r["motion"][:120]} · actual: "{r["current"]}"' for r in rows)
     user = f"PROSA DE REFERENCIA:\n{prose.strip()}\n\nTOMAS:\n{lst}\n\nDevolvé el JSON con una línea por toma."
     try:
-        txt = llm.complete(system, user)
+        txt = llm.complete(system, user, max_tokens=8192)   # holgado: modelos "thinking" gastan tokens de salida
     except Exception as e:
         return {"error": f"LLM: {type(e).__name__}: {str(e)[:160]}"}
-    mo = re.search(r"\{.*\}", txt, re.S)
+    clean = re.sub(r"^```(?:json)?|```$", "", (txt or "").strip(), flags=re.M).strip()   # quita fences ```json
+    mo = re.search(r"\{.*\}", clean, re.S)
     if not mo:
-        return {"error": "el LLM no devolvió JSON", "raw": txt[:300]}
+        return {"error": "el LLM no devolvió JSON (¿respuesta truncada?)", "raw": txt[:400]}
     try:
         data = json.loads(mo.group(0))
     except Exception:
-        return {"error": "JSON inválido del LLM", "raw": txt[:300]}
+        return {"error": "JSON inválido del LLM", "raw": txt[:400]}
     src = data.get("lines", data)
     lines = {str(k): (v or "").strip() for k, v in src.items()}
     return {"ok": True, "lines": lines}
