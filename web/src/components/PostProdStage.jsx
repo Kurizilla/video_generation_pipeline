@@ -202,6 +202,17 @@ export default function PostProdStage() {
         <Versions step="subs" versions={st.subs.versions} current={st.subs.current} onRevert={revert} />
       </StepCard>
 
+      {/* MÚSICA (opcional) — se mezcla bajo la VO en el master */}
+      <StepCard num={'♪'} title="Música de fondo (opcional)" step="music" state={st.music} busy={busy === 'Música'}
+        runLabel="Generar música con IA" onRun={() => runJob('Música', () => api.postMusic({}))}
+        note={st.unify.status === 'pending' ? 'Unificá primero.' : 'ElevenLabs Music, del largo exacto del video. Se mezcla bajo la VO (calibrada) al armar el master.'}>
+        {A('music') && <>
+          <audio src={outUrl(A('music').path)} controls style={{ width: '100%', marginTop: 8 }} />
+          <div className="muted" style={{ marginTop: 4 }}>tema: {A('music').tema}</div>
+        </>}
+        <Versions step="music" versions={st.music.versions} current={st.music.current} onRevert={revert} />
+      </StepCard>
+
       {/* PASO 4 — MASTER */}
       <StepCard num={4} title="Armar final" step="master" state={st.master} busy={busy === 'Master'}
         runLabel="Armar final" onRun={st.master.can_build ? () => runJob('Master', () => api.postMaster({})) : null}

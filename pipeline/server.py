@@ -294,6 +294,11 @@ def build_app(project):
     @app.post("/api/post/subs")             # PASO 3 (gratis) — rápido, síncrono
     def post_subs(): return postprod.subs(project)
 
+    @app.post("/api/post/music")            # música ad-hoc (ElevenLabs Music, paga) — background
+    def post_music(body: dict = Body(default={})):
+        tema = body.get("tema", "education, childhood, technology, hopeful")
+        return {"job_id": _bg("post", "música", lambda: postprod.music_gen(project, tema))}
+
     @app.put("/api/post/subs")              # editar subtítulos a mano (nueva versión)
     def post_subs_edit(body: dict = Body(...)): return postprod.subs_edit(project, body.get("content", ""))
 

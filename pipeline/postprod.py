@@ -67,6 +67,7 @@ def _shots_sig(project):
 def _dep_sig_live(project, m, step):
     if step == "unify": return _shots_sig(project)
     if step == "vo":    return f"unify:{_cur(m, 'unify')}"
+    if step == "music": return f"unify:{_cur(m, 'unify')}"
     if step == "subs":  return f"vo:{_cur(m, 'vo')}"
     if step == "master":return f"unify:{_cur(m,'unify')}|vo:{_cur(m,'vo')}|subs:{_cur(m,'subs')}"
     return ""
@@ -344,7 +345,38 @@ def subs_edit(project, content):
 
 
 # ================= PASO 4 — MASTER =================
-def master(project, music=None):
+def music_gen(project, tema="education, childhood, technology, hopeful"):
+    """Genera música de fondo ad-hoc (ElevenLabs Music) del largo EXACTO del video unificado y la
+    registra como artefacto 'music'. Se mezcla bajo la VO en el master."""
+    from . import music as musicmod
+    if not falx.paid_enabled():
+        return {"error": "la música usa ElevenLabs (pago). Poné el server en PAGA (LOOP_ALLOW_PAID=1)."}
+    m = _load(project); u = _cur_entry(m, "unify")
+    if not u: return {"error": "primero unificá (paso 1): la música se hace del largo del video"}
+    d = _dir(project); v = _next_v(m, "music"); dest = d / f"music.v{v}.mp3"
+    prompt = musicmod.theme_prompt(tema)
+    try:
+        musicmod.generate(prompt, u["dur"], dest)
+    except Exception as e:
+        return {"error": f"music: {type(e).__name__}: {str(e)[:150]}"}
+    _register(project, m, "music", {"path": f"{POST}/music.v{v}.mp3", "prompt": prompt, "tema": tema},
+              f"unify:{_cur(m, 'unify')}")
+    _save(project, m)
+    return {"ok": True, "v": v, "path": str(dest), "tema": tema}
+
+
+def measure(path, a, b):
+    """mean/max volume (dBFS) de un tramo [a,b] con volumedetect. Para calibrar la música por tramos."""
+    r = subprocess.run(["ffmpeg", "-i", str(path), "-af", f"atrim={a}:{b},volumedetect", "-f", "null", "-"],
+                       capture_output=True, text=True)
+    import re
+    txt = r.stderr
+    mean = re.search(r"mean_volume:\s*(-?[\d.]+)", txt)
+    mx = re.search(r"max_volume:\s*(-?[\d.]+)", txt)
+    return {"mean": float(mean.group(1)) if mean else None, "max": float(mx.group(1)) if mx else None}
+
+
+def master(project, music=None, music_vol=0.42):
     m = _load(project)
     st = {s: _status(project, m, s) for s in ("unify", "vo", "subs")}
     if any(v != "ready" for v in st.values()):
@@ -365,8 +397,12 @@ def master(project, music=None):
         png = assemble._render_sub(project, f"post_{i}", sg["text"])
         if png: inp += ["-loop", "1", "-i", str(png)]; sub_in.append((idx, sg)); idx += 1
     music_idx = None
-    music = music or project.data.get("music")
-    if music and pathlib.Path(music).is_file(): inp += ["-stream_loop", "-1", "-i", str(music)]; music_idx = idx; idx += 1
+    if music is False:               # forzar SIN música (para medir la VO sola en la calibración)
+        music = None
+    else:
+        mus_e = _cur_entry(m, "music")   # artefacto de música (si se generó)
+        music = music or (str(project.out / mus_e["path"]) if mus_e else None) or project.data.get("music")
+    if music and pathlib.Path(music).is_file(): inp += ["-i", str(music)]; music_idx = idx; idx += 1   # largo exacto → sin loop
     fg = ""; prev = "0:v"
     for k, (sidx, sg) in enumerate(sub_in):
         fg += f"[{prev}][{sidx}:v]overlay=0:0:enable='between(t,{sg['start']:.2f},{sg['end']:.2f})'[s{k}];"; prev = f"s{k}"
@@ -379,7 +415,11 @@ def master(project, music=None):
         fg += "".join(va) + f"amix=inputs={len(va)}:normalize=0[voice];[voice]apad=whole_dur={VID:.3f}[voicep];"
         aout = "[voicep]"
         if music_idx is not None:
-            fg += f"[{music_idx}:a]volume=0.12,atrim=0:{VID:.3f}[mus];[voicep][mus]amix=inputs=2:duration=first:normalize=0[aout];"
+            # dynaudnorm: nivela la música (sube el intro suave) para una cama pareja bajo la voz.
+            # alimiter al final: techo ~-0.4 dBFS -> se puede subir la música sin que el mix sature.
+            fg += (f"[{music_idx}:a]dynaudnorm=f=250:g=7,volume={music_vol},atrim=0:{VID:.3f}[mus];"
+                   f"[voicep][mus]amix=inputs=2:duration=first:normalize=0[amixed];"
+                   f"[amixed]alimiter=limit=0.955[aout];")
             aout = "[aout]"
     d = _dir(project); v = _next_v(m, "master"); dest = d / f"master.v{v}.mp4"
     cmd = ["ffmpeg", "-y"] + inp + ["-filter_complex", fg.rstrip(";"), "-map", "[vout]"] + \
@@ -398,7 +438,7 @@ def master(project, music=None):
 # ================= estado + revert (para el front) =================
 def state(project):
     m = _load(project); out = {}
-    for s in ("unify", "vo", "subs", "master"):
+    for s in ("unify", "vo", "subs", "music", "master"):
         e = m.get(s, {})
         out[s] = {"status": _status(project, m, s), "current": e.get("current", -1),
                   "versions": e.get("versions", []), "artifact": _cur_entry(m, s)}

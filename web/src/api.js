@@ -71,6 +71,7 @@ export const api = {
   postVoDistribute: (body) => post('/api/post/vo/distribute', body),
   postVo: (body) => post('/api/post/vo', body),
   postSubs: () => post('/api/post/subs'),
+  postMusic: (body) => post('/api/post/music', body),
   postSubsEdit: (content) => fetch(API + '/api/post/subs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) }).then(asJson),
   postMaster: (body) => post('/api/post/master', body),
   postRevert: (body) => post('/api/post/revert', body),
