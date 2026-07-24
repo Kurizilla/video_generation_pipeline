@@ -285,7 +285,8 @@ def build_app(project):
     def post_vo_prep(body: dict = Body(default={})): return postprod.vo_prep(project, body.get("lines"))
 
     @app.post("/api/post/vo/distribute")    # PASO 2 asistente: prosa → 1 línea por toma con IA
-    def post_vo_distribute(body: dict = Body(...)): return postprod.vo_distribute(project, body.get("prose", ""))
+    def post_vo_distribute(body: dict = Body(...)):
+        return postprod.vo_distribute(project, body.get("prose", ""), body.get("vision", True), body.get("fill", 1.0))
 
     @app.post("/api/post/vo")               # PASO 2 (paga si LOOP_ALLOW_PAID) — background
     def post_vo(body: dict = Body(default={})):

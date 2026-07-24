@@ -182,12 +182,16 @@ def _toma_frame(project, t):
     return None
 
 
-def vo_distribute(project, prose, vision=True):
+def vo_distribute(project, prose, vision=True, fill=1.0):
     """IA: reparte/adapta un guion en PROSA entre las tomas (1 línea por toma), ajustando a la duración.
     Con vision=True le manda a Gemini un FOTOGRAMA de cada toma para que VEA qué pasa y asigne el guion a
-    lo que realmente se ve (dejando vacías las tomas que no encajan). Devuelve {n(str): texto}."""
+    lo que realmente se ve (dejando vacías las tomas que no encajan). `fill` regula qué tan extensas quedan
+    las líneas: 1.0 = conciso (~2.5 pal/seg); 1.2 = ~20% más extenso (frases completas), SIN pasar el cap
+    temporal de cada toma (para que nunca se solapen audio ni subtítulos). Devuelve {n(str): texto}."""
     import re
     from . import llm
+    wps = round(2.5 * float(fill), 2)   # palabras/seg objetivo; el cap por toma = dur * wps
+    extenso = fill > 1.05
     if not (prose or "").strip():
         return {"error": "pegá un guion en prosa primero"}
     if not llm.available():
@@ -211,25 +215,29 @@ def vo_distribute(project, prose, vision=True):
             if fr: imgs.append(fr)
         if len(imgs) != len(rows): imgs = []   # no arriesgar desalineación imagen↔toma
 
+    ext_txt = ("Escribí frases COMPLETAS y con textura, un poco más extensas (no telegráficas): aprovechá ~el "
+               "85-95% de la duración de cada toma. " if extenso else "")
+    cap_txt = ("PERO nunca superes el máx de palabras de cada toma — es un tope DURO para que el audio quepa en "
+               "su toma y NUNCA se solapen ni el audio ni los subtítulos con la toma siguiente.")
     if imgs:
         system = ("Sos editor de voz en off para un corto animado. Te doy un GUION EN PROSA y un FOTOGRAMA de "
                   "cada toma, EN ORDEN (toma 1..N). MIRÁ cada fotograma para entender qué pasa en esa toma y "
                   "asigná la parte del guion que corresponda a LO QUE SE VE, respetando el orden narrativo. UNA "
-                  "línea por toma, parafraseando el guion para que quepa hablado en la duración de la toma "
-                  "(~2.5 palabras/seg). Si una toma NO encaja con ninguna parte del guion, dejá su línea VACÍA "
-                  "(\"\") en lugar de forzar texto. El texto sale EXCLUSIVAMENTE del guion dado; nada inventado, "
-                  "sin marcas ni tonos. Devolvé SOLO JSON: {\"lines\": {\"<n>\": \"<texto>\"}}.")
-        lst = "\n".join(f'{r["n"]}) {r["dur"]}s · máx≈{int(r["dur"]*2.5)} palabras' for r in rows)
+                  f"línea por toma, parafraseando el guion para que quepa hablado en la duración de la toma. {ext_txt}{cap_txt} "
+                  "Si una toma NO encaja con ninguna parte del guion, dejá su línea VACÍA (\"\") en lugar de "
+                  "forzar texto. El texto sale EXCLUSIVAMENTE del guion dado; nada inventado, sin marcas ni "
+                  "tonos. Devolvé SOLO JSON: {\"lines\": {\"<n>\": \"<texto>\"}}.")
+        lst = "\n".join(f'{r["n"]}) {r["dur"]}s · máx {int(r["dur"]*wps)} palabras' for r in rows)
         nums = ", ".join(str(r["n"]) for r in rows)
         user = (f"GUION EN PROSA (única fuente del texto):\n{prose.strip()}\n\n"
                 f"TOMAS (n · duración · máx palabras):\n{lst}\n\n"
                 f"Siguen {len(imgs)} fotogramas, uno por toma EN ESTE ORDEN: {nums}. Devolvé el JSON.")
     else:
         system = ("Sos editor de voz en off para un corto animado. Distribuís el GUION EN PROSA entre las tomas, "
-                  "UNA línea por toma, parafraseando para que quepa en la duración de cada toma (~2.5 pal/seg). "
+                  f"UNA línea por toma, parafraseando para que quepa en la duración de cada toma. {ext_txt}{cap_txt} "
                   "El texto sale EXCLUSIVAMENTE del guion; si una toma no encaja, dejala vacía. Usá título/acción "
                   "para decidir el reparto. Sin marcas ni tonos. SOLO JSON: {\"lines\": {\"<n>\": \"<texto>\"}}.")
-        lst = "\n".join(f'{r["n"]}) {r["dur"]}s · máx≈{int(r["dur"]*2.5)} palabras · {r["title"]} · acción: {r["motion"][:120]}' for r in rows)
+        lst = "\n".join(f'{r["n"]}) {r["dur"]}s · máx {int(r["dur"]*wps)} palabras · {r["title"]} · acción: {r["motion"][:120]}' for r in rows)
         user = f"GUION EN PROSA:\n{prose.strip()}\n\nTOMAS:\n{lst}\n\nDevolvé el JSON, una línea por toma."
     try:
         txt = llm.complete(system, user, max_tokens=8192, images=imgs)   # holgado (modelos 'thinking' gastan salida)
